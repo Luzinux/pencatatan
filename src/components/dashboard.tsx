@@ -15,10 +15,15 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  TrendingDown,
   Bell,
   Receipt,
   CircleDollarSign,
   Target,
+  PiggyBank,
+  Banknote,
+  Smartphone,
+  Building2,
 } from 'lucide-react'
 import {
   BarChart,
@@ -107,6 +112,13 @@ interface BudgetProgress {
   percentage: number
 }
 
+interface PaymentMethodBreakdown {
+  paymentMethodId: string
+  paymentMethodName: string
+  paymentMethodType: string
+  totalAmount: number
+}
+
 interface DashboardData {
   month: string
   totalExpense: number
@@ -117,6 +129,10 @@ interface DashboardData {
   monthlyTrend: MonthlyTrendItem[]
   upcomingBills: UpcomingBill[]
   budgetProgress: BudgetProgress[]
+  savingsRate: number
+  dailyAverageExpense: number
+  paymentMethodBreakdown: PaymentMethodBreakdown[]
+  transactionCount: number
 }
 
 // ── Chart Colors ───────────────────────────────────────────────────────────
@@ -132,6 +148,27 @@ const PIE_COLORS = [
   '#ec4899',
   '#14b8a6',
 ]
+
+const PM_COLORS: Record<string, string> = {
+  cash: '#22c55e',
+  ewallet: '#8b5cf6',
+  bank: '#0ea5e9',
+}
+
+const PM_ICONS: Record<string, React.ElementType> = {
+  cash: Banknote,
+  ewallet: Smartphone,
+  bank: Building2,
+}
+
+// ── Greeting based on time of day ──────────────────────────────────────────
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 11) return 'Selamat Pagi'
+  if (hour >= 11 && hour < 15) return 'Selamat Siang'
+  if (hour >= 15 && hour < 18) return 'Selamat Sore'
+  return 'Selamat Malam'
+}
 
 // ── Custom Tooltip for Bar Chart ───────────────────────────────────────────
 function BarChartTooltip({ active, payload, label }: any) {
@@ -185,10 +222,15 @@ function PieLegend({ payload }: any) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
+      {/* Greeting skeleton */}
+      <div className="space-y-1">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-3 w-28" />
+      </div>
       {/* Month selector skeleton */}
       <div className="flex items-center justify-center gap-4">
         <Skeleton className="h-9 w-9 rounded-md" />
-        <Skeleton className="h-8 w-32 rounded-md" />
+        <Skeleton className="h-8 w-32 rounded-full" />
         <Skeleton className="h-9 w-9 rounded-md" />
       </div>
       {/* Summary cards skeleton */}
@@ -200,6 +242,16 @@ function DashboardSkeleton() {
             </CardHeader>
             <CardContent>
               <Skeleton className="h-9 w-36" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {/* Stats row skeleton */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Card key={i}>
+            <CardContent className="p-4">
+              <Skeleton className="h-16 w-full" />
             </CardContent>
           </Card>
         ))}
@@ -254,6 +306,66 @@ function EmptyState({ message }: { message: string }) {
       </div>
       <p className="text-sm text-muted-foreground">{message}</p>
     </div>
+  )
+}
+
+// ── Savings Rate Circle ────────────────────────────────────────────────────
+function SavingsRateCircle({ rate }: { rate: number }) {
+  const radius = 28
+  const circumference = 2 * Math.PI * radius
+  const progress = Math.min(rate, 100) / 100
+  const strokeDashoffset = circumference * (1 - progress)
+
+  const colorClass =
+    rate >= 20
+      ? 'text-emerald-500'
+      : rate >= 10
+        ? 'text-amber-500'
+        : 'text-red-500'
+
+  const strokeColor =
+    rate >= 20
+      ? '#22c55e'
+      : rate >= 10
+        ? '#f59e0b'
+        : '#ef4444'
+
+  return (
+    <div className="relative flex items-center justify-center">
+      <svg width="72" height="72" className="-rotate-90">
+        <circle
+          cx="36"
+          cy="36"
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="5"
+          className="text-muted/30"
+        />
+        <circle
+          cx="36"
+          cy="36"
+          r={radius}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className="transition-all duration-700 ease-out"
+        />
+      </svg>
+      <span className={`absolute text-sm font-bold ${colorClass}`}>
+        {rate.toFixed(0)}%
+      </span>
+    </div>
+  )
+}
+
+// ── Gradient Separator ─────────────────────────────────────────────────────
+function GradientSeparator() {
+  return (
+    <div className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
   )
 }
 
@@ -338,36 +450,57 @@ export default function Dashboard() {
   const hasTransactions = data.recentTransactions.length > 0
   const hasTrendData = data.monthlyTrend.some((m) => m.expense > 0 || m.income > 0)
   const hasCategories = data.topCategories.length > 0
+  const hasPaymentMethodData = data.paymentMethodBreakdown.length > 0
+  const maxPmAmount = hasPaymentMethodData
+    ? Math.max(...data.paymentMethodBreakdown.map((pm) => pm.totalAmount))
+    : 0
 
   return (
     <div className="space-y-6">
-      {/* ── Month Selector ─────────────────────────────────────────────── */}
-      <div className="flex items-center justify-center gap-2">
-        <Button variant="outline" size="icon" onClick={goToPrevMonth} aria-label="Bulan sebelumnya">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          className="min-w-[140px] text-base font-semibold"
-          onClick={goToCurrentMonth}
-        >
-          {getMonthLabel(currentMonth)}
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={goToNextMonth}
-          disabled={isCurrentMonth}
-          aria-label="Bulan berikutnya"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+      {/* ── Greeting ──────────────────────────────────────────────────── */}
+      <div className="space-y-0.5">
+        <h2 className="text-lg font-semibold">{getGreeting()} 👋</h2>
+        <p className="text-sm text-muted-foreground">
+          Berikut ringkasan keuangan kamu
+        </p>
+      </div>
+
+      {/* ── Month Selector (Pill) ─────────────────────────────────────── */}
+      <div className="flex items-center justify-center">
+        <div className="flex items-center gap-1 rounded-full border bg-muted/50 px-1 py-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToPrevMonth}
+            aria-label="Bulan sebelumnya"
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            className="min-w-[130px] rounded-full text-sm font-semibold"
+            onClick={goToCurrentMonth}
+          >
+            {getMonthLabel(currentMonth)}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNextMonth}
+            disabled={isCurrentMonth}
+            aria-label="Bulan berikutnya"
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* ── Summary Cards ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Pengeluaran */}
-        <Card className="relative overflow-hidden border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm dark:border-red-900/40 dark:from-red-950/20 dark:to-card">
+        <Card className="relative overflow-hidden border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-red-900/40 dark:from-red-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
             <ArrowDownLeft className="h-5 w-5 text-red-500" />
           </div>
@@ -377,14 +510,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-red-600 sm:text-4xl dark:text-red-400">
+            <p className="text-3xl font-bold text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400">
               {formatCurrency(data.totalExpense)}
             </p>
           </CardContent>
         </Card>
 
         {/* Total Pemasukan */}
-        <Card className="relative overflow-hidden border-green-200 bg-gradient-to-br from-green-50 to-white shadow-sm dark:border-green-900/40 dark:from-green-950/20 dark:to-card">
+        <Card className="relative overflow-hidden border-green-200 bg-gradient-to-br from-green-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-green-900/40 dark:from-green-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
             <ArrowUpRight className="h-5 w-5 text-green-500" />
           </div>
@@ -394,14 +527,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-green-600 sm:text-4xl dark:text-green-400">
+            <p className="text-3xl font-bold text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400">
               {formatCurrency(data.totalIncome)}
             </p>
           </CardContent>
         </Card>
 
         {/* Sisa Uang */}
-        <Card className="relative overflow-hidden border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm dark:border-teal-900/40 dark:from-teal-950/20 dark:to-card">
+        <Card className="relative overflow-hidden border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-teal-900/40 dark:from-teal-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
             <Wallet className="h-5 w-5 text-teal-500" />
           </div>
@@ -412,7 +545,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p
-              className={`text-3xl font-bold sm:text-4xl ${
+              className={`text-3xl font-bold transition-all duration-500 sm:text-4xl ${
                 data.balance >= 0
                   ? 'text-teal-600 dark:text-teal-400'
                   : 'text-red-600 dark:text-red-400'
@@ -423,6 +556,80 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Stats Row ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Savings Rate */}
+        <Card className="transition-transform duration-200 hover:scale-[1.01]">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${
+                data.savingsRate >= 20
+                  ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                  : data.savingsRate >= 10
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-red-100 dark:bg-red-900/30'
+              }`}
+            >
+              <PiggyBank
+                className={`h-6 w-6 ${
+                  data.savingsRate >= 20
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : data.savingsRate >= 10
+                      ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-red-600 dark:text-red-400'
+                }`}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Rasio Tabungan
+              </p>
+              <div className="flex items-center gap-2">
+                <SavingsRateCircle rate={data.savingsRate} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Daily Average */}
+        <Card className="transition-transform duration-200 hover:scale-[1.01]">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-900/30">
+              <TrendingDown className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Rata-rata Harian
+              </p>
+              <p className="text-xl font-bold text-sky-600 dark:text-sky-400">
+                {formatCurrency(data.dailyAverageExpense)}
+              </p>
+              <p className="text-xs text-muted-foreground">per hari</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Transaction Count */}
+        <Card className="transition-transform duration-200 hover:scale-[1.01]">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/30">
+              <Receipt className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Jumlah Transaksi
+              </p>
+              <p className="text-xl font-bold text-violet-600 dark:text-violet-400">
+                {data.transactionCount}
+              </p>
+              <p className="text-xs text-muted-foreground">transaksi bulan ini</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <GradientSeparator />
 
       {/* ── Upcoming Bills ─────────────────────────────────────────────── */}
       {data.upcomingBills.length > 0 && (
@@ -586,6 +793,60 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      <GradientSeparator />
+
+      {/* ── Payment Method Breakdown ────────────────────────────────────── */}
+      {hasPaymentMethodData && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              Pengeluaran per Metode
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {data.paymentMethodBreakdown.map((pm) => {
+                const IconComponent = PM_ICONS[pm.paymentMethodType] || Banknote
+                const color = PM_COLORS[pm.paymentMethodType] || '#6b7280'
+                const percentage = maxPmAmount > 0 ? (pm.totalAmount / maxPmAmount) * 100 : 0
+
+                return (
+                  <div key={pm.paymentMethodId} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="flex h-8 w-8 items-center justify-center rounded-lg"
+                          style={{ backgroundColor: `${color}15` }}
+                        >
+                          <IconComponent
+                            className="h-4 w-4"
+                            style={{ color }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium">{pm.paymentMethodName}</span>
+                      </div>
+                      <span className="text-sm font-semibold">
+                        {formatCurrency(pm.totalAmount)}
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full transition-all duration-700 ease-out"
+                        style={{
+                          width: `${percentage}%`,
+                          backgroundColor: color,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Budget Progress ───────────────────────────────────────────── */}
       {data.budgetProgress && data.budgetProgress.length > 0 && (
         <Card>
@@ -644,6 +905,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      <GradientSeparator />
 
       {/* ── Recent Transactions ────────────────────────────────────────── */}
       <Card>

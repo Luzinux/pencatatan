@@ -19,6 +19,10 @@ export const api = {
   getDashboard: (month?: string) =>
     fetchJSON<any>(`/dashboard${month ? `?month=${month}` : ''}`),
 
+  // Analytics
+  getAnalytics: (month?: string) =>
+    fetchJSON<any>(`/analytics${month ? `?month=${month}` : ''}`),
+
   // Categories
   getCategories: (type?: string) =>
     fetchJSON<any[]>(`/categories${type ? `?type=${type}` : ''}`),
@@ -82,4 +86,16 @@ export const api = {
     fetchJSON<any>('/budgets', { method: 'POST', body: JSON.stringify(data) }),
   deleteBudget: (id: string) =>
     fetchJSON<any>(`/budgets/${id}`, { method: 'DELETE' }),
+
+  // Savings Goals
+  getSavings: () =>
+    fetchJSON<any[]>('/savings'),
+  createSavings: (data: any) =>
+    fetchJSON<any>('/savings', { method: 'POST', body: JSON.stringify(data) }),
+  updateSavings: (id: string, data: any) =>
+    fetchJSON<any>(`/savings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSavings: (id: string) =>
+    fetchJSON<any>(`/savings/${id}`, { method: 'DELETE' }),
+  depositSavings: (id: string, data: any) =>
+    fetchJSON<any>(`/savings/${id}/deposit`, { method: 'POST', body: JSON.stringify(data) }),
 }

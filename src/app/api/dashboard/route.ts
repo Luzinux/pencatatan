@@ -158,6 +158,54 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    // ── New stats ──────────────────────────────────────────────────────────
+
+    // Savings rate: (income - expense) / income * 100, capped at 0 if negative
+    const savingsRate = totalIncome > 0
+      ? Math.max(0, Math.round(((totalIncome - totalExpense) / totalIncome) * 10000) / 100)
+      : 0
+
+    // Daily average expense: total expense / days in the selected month
+    const daysInMonth = new Date(year, mon, 0).getDate()
+    const dailyAverageExpense = Math.round(totalExpense / daysInMonth)
+
+    // Payment method breakdown: total expenses grouped by payment method
+    const paymentMethodGroups = await db.transaction.groupBy({
+      by: ['paymentMethodId'],
+      where: {
+        type: 'expense',
+        date: { gte: monthStart, lt: monthEnd },
+        paymentMethodId: { not: null },
+      },
+      _sum: { amount: true },
+      orderBy: { _sum: { amount: 'desc' } },
+    })
+
+    const pmIds = paymentMethodGroups
+      .map((pm) => pm.paymentMethodId)
+      .filter((id): id is string => id !== null)
+
+    const paymentMethods = await db.paymentMethod.findMany({
+      where: { id: { in: pmIds } },
+    })
+
+    const paymentMethodBreakdown = paymentMethodGroups.map((pm) => {
+      const method = paymentMethods.find((m) => m.id === pm.paymentMethodId)
+      return {
+        paymentMethodId: pm.paymentMethodId,
+        paymentMethodName: method?.name ?? 'Tidak Diketahui',
+        paymentMethodType: method?.type ?? 'cash',
+        totalAmount: pm._sum.amount || 0,
+      }
+    })
+
+    // Transaction count for the month
+    const transactionCount = await db.transaction.count({
+      where: {
+        date: { gte: monthStart, lt: monthEnd },
+      },
+    })
+
     return NextResponse.json({
       month: currentMonth,
       totalExpense,
@@ -168,6 +216,10 @@ export async function GET(request: NextRequest) {
       monthlyTrend,
       upcomingBills,
       budgetProgress,
+      savingsRate,
+      dailyAverageExpense,
+      paymentMethodBreakdown,
+      transactionCount,
     })
   } catch (error) {
     console.error('Error fetching dashboard:', error)

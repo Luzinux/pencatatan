@@ -33,6 +33,7 @@ model PaymentMethod {
   transferTransactions  Transaction[] @relation("TransferTo")
   wishlists             Wishlist[]
   bills                 Bill[]
+  savingsGoals          SavingsGoal[]
 }
 
 model Transaction {
@@ -101,4 +102,19 @@ model Budget {
   updatedAt  DateTime @updatedAt
 
   category Category @relation(fields: [categoryId], references: [id])
+}
+
+model SavingsGoal {
+  id              String   @id @default(cuid())
+  name            String
+  targetAmount    Float
+  currentAmount   Float    @default(0)
+  targetDate      DateTime?
+  status          String   @default("active") // active, completed, cancelled
+  note            String?
+  paymentMethodId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
 }

@@ -116,7 +116,110 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0 / 30%);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 50%);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0 0 / 30%);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 50%);
+}
+
+/* Focus Ring Animation */
+@layer utilities {
+  .focus-ring-animated {
+    transition: box-shadow 0.2s ease;
+  }
+  .focus-ring-animated:focus-visible {
+    @apply outline-none ring-2 ring-ring/50 ring-offset-2 ring-offset-background;
+    animation: focus-ring-pulse 0.3s ease-out;
+  }
+
+  /* Card Hover Effect Utility */
+  .card-hover {
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .card-hover:hover {
+    box-shadow: 0 4px 6px -1px oklch(0 0 0 / 10%), 0 2px 4px -2px oklch(0 0 0 / 10%);
+  }
+  .dark .card-hover:hover {
+    box-shadow: 0 4px 6px -1px oklch(0 0 0 / 30%), 0 2px 4px -2px oklch(0 0 0 / 20%);
+  }
+
+  /* FAB Pulse Animation */
+  @keyframes fab-pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    100% {
+      transform: scale(1.5);
+      opacity: 0;
+    }
+  }
+  .fab-pulse-ring {
+    animation: fab-pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Sidebar menu item hover translate */
+  .sidebar-menu-hover {
+    transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+  .sidebar-menu-hover:hover {
+    transform: translateX(4px);
+  }
+
+  /* Title fade-in animation */
+  @keyframes title-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .title-fade-in {
+    animation: title-fade-in 0.3s ease-out;
+  }
+}
+
+@keyframes focus-ring-pulse {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.708 0 0 / 40%);
+  }
+  70% {
+    box-shadow: 0 0 0 4px oklch(0.708 0 0 / 0%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.708 0 0 / 0%);
   }
 }

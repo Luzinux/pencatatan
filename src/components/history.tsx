@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
+import { useAppStore } from '@/lib/store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,11 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +41,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Separator } from '@/components/ui/separator'
 import {
   Search,
   Trash2,
@@ -48,6 +55,10 @@ import {
   Plus,
   Loader2,
   Download,
+  Wallet,
+  CalendarDays,
+  ChevronDown,
+  ArrowRight,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -102,10 +113,16 @@ const TYPE_COLORS = {
   transfer: 'text-sky-600',
 } as const
 
-const TYPE_BG = {
-  expense: 'bg-red-50 border-red-100',
-  income: 'bg-emerald-50 border-emerald-100',
-  transfer: 'bg-sky-50 border-sky-100',
+const TYPE_BG_CIRCLE = {
+  expense: 'bg-red-100 dark:bg-red-950/40',
+  income: 'bg-emerald-100 dark:bg-emerald-950/40',
+  transfer: 'bg-sky-100 dark:bg-sky-950/40',
+} as const
+
+const TYPE_BORDER_LEFT = {
+  expense: 'border-l-red-500',
+  income: 'border-l-emerald-500',
+  transfer: 'border-l-sky-500',
 } as const
 
 const TYPE_ICONS = {
@@ -127,8 +144,8 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 const SOURCE_COLORS: Record<string, string> = {
-  wishlist: 'bg-purple-100 text-purple-700',
-  bill: 'bg-amber-100 text-amber-700',
+  wishlist: 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
+  bill: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
 }
 
 function getTodayMonth(): string {
@@ -198,6 +215,11 @@ function TransactionSkeleton() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-20 rounded-xl" />
+        ))}
+      </div>
       <div className="space-y-2">
         <Skeleton className="h-5 w-24" />
         {[1, 2, 3].map((i) => (
@@ -216,18 +238,33 @@ function LoadingSkeleton() {
 
 function EmptyState({ onAddClick }: { onAddClick?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-        <Receipt className="h-8 w-8 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      {/* Stacked icons illustration */}
+      <div className="relative w-28 h-28 mb-6">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-20 h-20 rounded-2xl bg-muted/60 dark:bg-muted/30 flex items-center justify-center rotate-6">
+            <Receipt className="h-9 w-9 text-muted-foreground/50" />
+          </div>
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-muted/80 dark:bg-muted/50 flex items-center justify-center -rotate-3 translate-y-1">
+            <Wallet className="h-7 w-7 text-muted-foreground/70" />
+          </div>
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-muted dark:bg-muted/80 flex items-center justify-center -rotate-6 -translate-y-1">
+            <ArrowUpRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </div>
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-1">
         Belum ada transaksi
       </h3>
-      <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+      <p className="text-sm text-muted-foreground mb-6 max-w-xs">
         Tambahkan transaksi pertama untuk mulai mencatat keuangan Anda
       </p>
       {onAddClick && (
-        <Button onClick={onAddClick} size="sm" className="gap-1.5">
+        <Button onClick={onAddClick} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
           <Plus className="h-4 w-4" />
           Tambah Transaksi
         </Button>
@@ -238,17 +275,26 @@ function EmptyState({ onAddClick }: { onAddClick?: () => void }) {
 
 function NoResultsState({ onClear }: { onClear: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-        <Search className="h-8 w-8 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="relative w-28 h-28 mb-6">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-20 h-20 rounded-2xl bg-muted/60 dark:bg-muted/30 flex items-center justify-center rotate-3">
+            <Search className="h-9 w-9 text-muted-foreground/50" />
+          </div>
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-xl bg-muted dark:bg-muted/80 flex items-center justify-center -rotate-6 -translate-y-1">
+            <X className="h-6 w-6 text-muted-foreground" />
+          </div>
+        </div>
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-1">
         Tidak ada hasil
       </h3>
-      <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+      <p className="text-sm text-muted-foreground mb-6 max-w-xs">
         Tidak ditemukan transaksi yang sesuai dengan filter Anda
       </p>
-      <Button onClick={onClear} variant="outline" size="sm" className="gap-1.5">
+      <Button onClick={onClear} variant="outline" className="gap-2">
         <X className="h-4 w-4" />
         Hapus Filter
       </Button>
@@ -256,8 +302,153 @@ function NoResultsState({ onClear }: { onClear: () => void }) {
   )
 }
 
+function SummaryStats({ transactions }: { transactions: Transaction[] }) {
+  const totalExpense = transactions
+    .filter((t) => t.type === 'expense')
+    .reduce((s, t) => s + t.amount, 0)
+  const totalIncome = transactions
+    .filter((t) => t.type === 'income')
+    .reduce((s, t) => s + t.amount, 0)
+  const netBalance = totalIncome - totalExpense
+  const count = transactions.length
+
+  const stats = [
+    {
+      label: 'Total Pengeluaran',
+      amount: totalExpense,
+      icon: ArrowDownLeft,
+      color: 'text-red-600 dark:text-red-400',
+      bg: 'bg-red-50 dark:bg-red-950/20',
+      iconBg: 'bg-red-100 dark:bg-red-900/40',
+      format: (v: number) => `-${formatCurrency(v)}`,
+    },
+    {
+      label: 'Total Pemasukan',
+      amount: totalIncome,
+      icon: ArrowUpRight,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/20',
+      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+      format: (v: number) => `+${formatCurrency(v)}`,
+    },
+    {
+      label: 'Saldo Bersih',
+      amount: netBalance,
+      icon: Wallet,
+      color: netBalance >= 0 ? 'text-teal-600 dark:text-teal-400' : 'text-red-600 dark:text-red-400',
+      bg: netBalance >= 0 ? 'bg-teal-50 dark:bg-teal-950/20' : 'bg-red-50 dark:bg-red-950/20',
+      iconBg: netBalance >= 0 ? 'bg-teal-100 dark:bg-teal-900/40' : 'bg-red-100 dark:bg-red-900/40',
+      format: (v: number) => (v >= 0 ? '+' : '') + formatCurrency(v),
+    },
+    {
+      label: 'Jumlah Transaksi',
+      amount: count,
+      icon: Receipt,
+      color: 'text-muted-foreground',
+      bg: 'bg-muted/50',
+      iconBg: 'bg-muted dark:bg-muted/60',
+      format: (v: number) => `${v} transaksi`,
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {stats.map((stat) => {
+        const Icon = stat.icon
+        return (
+          <div
+            key={stat.label}
+            className={`rounded-xl p-3 sm:p-4 ${stat.bg} border border-border/30 transition-all duration-200 hover:shadow-sm`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`flex items-center justify-center h-7 w-7 rounded-lg ${stat.iconBg}`}>
+                <Icon className={`h-3.5 w-3.5 ${stat.color}`} />
+              </div>
+              <span className="text-[11px] sm:text-xs text-muted-foreground font-medium leading-tight">
+                {stat.label}
+              </span>
+            </div>
+            <div className={`text-sm sm:text-base font-bold ${stat.color} leading-tight`}>
+              {stat.format(stat.amount)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ActiveFilterPills({
+  search,
+  typeFilter,
+  monthFilter,
+  categoryFilter,
+  categories,
+  onRemoveSearch,
+  onRemoveType,
+  onRemoveMonth,
+  onRemoveCategory,
+}: {
+  search: string
+  typeFilter: string
+  monthFilter: string
+  categoryFilter: string
+  categories: Category[]
+  onRemoveSearch: () => void
+  onRemoveType: () => void
+  onRemoveMonth: () => void
+  onRemoveCategory: () => void
+}) {
+  const pills: { label: string; onRemove: () => void }[] = []
+
+  if (search.trim()) {
+    pills.push({ label: `Cari: "${search.trim()}"`, onRemove: onRemoveSearch })
+  }
+  if (typeFilter !== 'all') {
+    const typeLabel = TYPE_OPTIONS.find((o) => o.value === typeFilter)?.label || typeFilter
+    pills.push({ label: `Tipe: ${typeLabel}`, onRemove: onRemoveType })
+  }
+  if (monthFilter) {
+    const [y, m] = monthFilter.split('-')
+    const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(
+      new Date(parseInt(y), parseInt(m) - 1, 1)
+    )
+    pills.push({ label: `Bulan: ${monthLabel}`, onRemove: onRemoveMonth })
+  }
+  if (categoryFilter !== 'all') {
+    const cat = categories.find((c) => c.id === categoryFilter)
+    pills.push({
+      label: `Kategori: ${cat?.icon || ''} ${cat?.name || categoryFilter}`,
+      onRemove: onRemoveCategory,
+    })
+  }
+
+  if (pills.length === 0) return null
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {pills.map((pill) => (
+        <Badge
+          key={pill.label}
+          variant="secondary"
+          className="gap-1 pr-1 text-xs font-normal"
+        >
+          {pill.label}
+          <button
+            onClick={pill.onRemove}
+            className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 transition-colors"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      ))}
+    </div>
+  )
+}
+
 export default function History() {
   const { toast } = useToast()
+  const setCurrentPage = useAppStore((s) => s.setCurrentPage)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -267,6 +458,7 @@ export default function History() {
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [filterOpen, setFilterOpen] = useState(true)
 
   // Edit state
   const [editTarget, setEditTarget] = useState<Transaction | null>(null)
@@ -288,27 +480,6 @@ export default function History() {
     setMonthFilter('')
     setCategoryFilter('all')
   }, [])
-
-  const handleExportCSV = useCallback(() => {
-    const headers = ['Tanggal', 'Jenis', 'Kategori', 'Jumlah', 'Metode Pembayaran', 'Catatan']
-    const typeLabels: Record<string, string> = { expense: 'Pengeluaran', income: 'Pemasukan', transfer: 'Transfer' }
-    const rows = filteredTransactions.map(tx => [
-      new Date(tx.date).toISOString().split('T')[0],
-      typeLabels[tx.type] || tx.type,
-      tx.type === 'transfer' ? 'Transfer' : tx.category?.name || '',
-      tx.amount.toString(),
-      tx.paymentMethod?.name || '',
-      (tx.note || '').replace(/,/g, ';')
-    ])
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `transaksi_${monthFilter || 'semua'}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [filteredTransactions, monthFilter])
 
   // Fetch categories for the filter dropdown
   useEffect(() => {
@@ -363,6 +534,27 @@ export default function History() {
   }, [transactions, categoryFilter])
 
   const grouped = useMemo(() => groupByDate(filteredTransactions), [filteredTransactions])
+
+  const handleExportCSV = useCallback(() => {
+    const headers = ['Tanggal', 'Jenis', 'Kategori', 'Jumlah', 'Metode Pembayaran', 'Catatan']
+    const typeLabels: Record<string, string> = { expense: 'Pengeluaran', income: 'Pemasukan', transfer: 'Transfer' }
+    const rows = filteredTransactions.map(tx => [
+      new Date(tx.date).toISOString().split('T')[0],
+      typeLabels[tx.type] || tx.type,
+      tx.type === 'transfer' ? 'Transfer' : tx.category?.name || '',
+      tx.amount.toString(),
+      tx.paymentMethod?.name || '',
+      (tx.note || '').replace(/,/g, ';')
+    ])
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `transaksi_${monthFilter || 'semua'}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [filteredTransactions, monthFilter])
 
   const handleOpenEdit = (tx: Transaction) => {
     setEditTarget(tx)
@@ -435,91 +627,131 @@ export default function History() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter Bar */}
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Filter</span>
-            <div className="ml-auto flex items-center gap-2">
-              {filteredTransactions.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportCSV}
-                  className="h-7 text-xs gap-1 px-2"
-                >
-                  <Download className="h-3 w-3" />
-                  Export CSV
-                </Button>
-              )}
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="h-7 text-xs gap-1 px-2"
-                >
-                  <X className="h-3 w-3" />
-                  Hapus Filter
-                </Button>
-              )}
-            </div>
-          </div>
+      {/* Filter Bar - Collapsible */}
+      <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
+        <Card>
+          <CardContent className="p-4 space-y-0">
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center gap-2 cursor-pointer select-none">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Filter</span>
+                {/* Transaction count badge */}
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                  {filteredTransactions.length}
+                </Badge>
+                {/* Active filter count indicator */}
+                {hasActiveFilters && (
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                )}
+                <div className="ml-auto flex items-center gap-2">
+                  {filteredTransactions.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleExportCSV()
+                      }}
+                      className="h-7 text-xs gap-1 px-2"
+                    >
+                      <Download className="h-3 w-3" />
+                      Export CSV
+                    </Button>
+                  )}
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        clearFilters()
+                      }}
+                      className="h-7 text-xs gap-1 px-2"
+                    >
+                      <X className="h-3 w-3" />
+                      Hapus Filter
+                    </Button>
+                  )}
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                      filterOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+              </div>
+            </CollapsibleTrigger>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Cari catatan transaksi..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
-            />
-          </div>
+            <CollapsibleContent>
+              <div className="space-y-3 pt-3">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cari catatan transaksi..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 h-9 ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary/50 transition-shadow"
+                  />
+                </div>
 
-          {/* Filters row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {/* Type filter */}
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Tipe" />
-              </SelectTrigger>
-              <SelectContent>
-                {TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                {/* Filters row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Type filter */}
+                  <Select value={typeFilter} onValueChange={setTypeFilter}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Tipe" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TYPE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-            {/* Month filter */}
-            <Input
-              type="month"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              placeholder="Bulan"
-              className="h-9"
-            />
+                  {/* Month filter */}
+                  <Input
+                    type="month"
+                    value={monthFilter}
+                    onChange={(e) => setMonthFilter(e.target.value)}
+                    placeholder="Bulan"
+                    className="h-9"
+                  />
 
-            {/* Category filter */}
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Kategori" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Semua Kategori</SelectItem>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.icon} {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+                  {/* Category filter */}
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Kategori</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Active filter pills */}
+                <ActiveFilterPills
+                  search={search}
+                  typeFilter={typeFilter}
+                  monthFilter={monthFilter}
+                  categoryFilter={categoryFilter}
+                  categories={categories}
+                  onRemoveSearch={() => setSearch('')}
+                  onRemoveType={() => setTypeFilter('all')}
+                  onRemoveMonth={() => setMonthFilter('')}
+                  onRemoveCategory={() => setCategoryFilter('all')}
+                />
+              </div>
+            </CollapsibleContent>
+          </CardContent>
+        </Card>
+      </Collapsible>
 
       {/* Transaction List */}
       {loading ? (
@@ -534,151 +766,174 @@ export default function History() {
             {hasActiveFilters ? (
               <NoResultsState onClear={clearFilters} />
             ) : (
-              <EmptyState />
+              <EmptyState onAddClick={() => setCurrentPage('transaksi')} />
             )}
           </CardContent>
         </Card>
       ) : (
-        <ScrollArea className="max-h-[65vh] [&>div]:scrollbar-thin [&>div]:scrollbar-thumb-muted-foreground/20 [&>div]:scrollbar-track-transparent">
-          <div className="space-y-3 pr-1">
-            {grouped.map((group) => (
-              <Card key={group.date}>
-                <CardContent className="p-0">
-                  {/* Date header */}
-                  <div className="sticky top-0 z-10 bg-card px-4 pt-3 pb-2 border-b border-border/50">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-foreground">
-                        {group.label}
-                      </h3>
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(group.date)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      {(() => {
-                        const expense = group.transactions
-                          .filter((t) => t.type === 'expense')
-                          .reduce((s, t) => s + t.amount, 0)
-                        const income = group.transactions
-                          .filter((t) => t.type === 'income')
-                          .reduce((s, t) => s + t.amount, 0)
-                        return (
-                          <>
-                            {expense > 0 && (
-                              <span className="text-xs text-red-600 font-medium">
-                                -{formatCurrency(expense)}
-                              </span>
-                            )}
-                            {income > 0 && (
-                              <span className="text-xs text-emerald-600 font-medium">
-                                +{formatCurrency(income)}
-                              </span>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </div>
-                  </div>
+        <>
+          {/* Summary Stats Banner */}
+          <SummaryStats transactions={filteredTransactions} />
 
-                  {/* Transaction items */}
-                  <div className="divide-y divide-border/30">
-                    {group.transactions.map((tx) => {
-                      const TypeIcon = TYPE_ICONS[tx.type as keyof typeof TYPE_ICONS] || ArrowUpRight
-                      const typeColor = TYPE_COLORS[tx.type as keyof typeof TYPE_COLORS] || 'text-foreground'
-                      const typeBg = TYPE_BG[tx.type as keyof typeof TYPE_BG] || ''
-                      const sourceColor = SOURCE_COLORS[tx.source] || ''
-                      const sourceLabel = SOURCE_LABELS[tx.source] || tx.source
+          <ScrollArea className="max-h-[60vh] [&>div]:scrollbar-thin [&>div]:scrollbar-thumb-muted-foreground/20 [&>div]:scrollbar-track-transparent">
+            <div className="space-y-3 pr-1">
+              {grouped.map((group) => {
+                const dayExpense = group.transactions
+                  .filter((t) => t.type === 'expense')
+                  .reduce((s, t) => s + t.amount, 0)
+                const dayIncome = group.transactions
+                  .filter((t) => t.type === 'income')
+                  .reduce((s, t) => s + t.amount, 0)
 
-                      return (
-                        <div
-                          key={tx.id}
-                          className={`flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors ${typeBg}`}
-                        >
-                          {/* Category icon / type icon */}
-                          <div className="flex items-center justify-center h-10 w-10 rounded-full bg-background border shrink-0 text-lg">
-                            {tx.type === 'transfer'
-                              ? '🔄'
-                              : tx.category?.icon || '📝'}
+                return (
+                  <Card key={group.date} className="overflow-hidden">
+                    <CardContent className="p-0">
+                      {/* Date header - Enhanced */}
+                      <div className="sticky top-0 z-10 bg-card px-4 pt-3 pb-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <h3 className="text-sm font-semibold text-foreground">
+                              {group.label}
+                            </h3>
                           </div>
-
-                          {/* Details */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-foreground truncate">
-                                {tx.type === 'transfer'
-                                  ? 'Transfer'
-                                  : tx.category?.name || 'Tanpa Kategori'}
-                              </span>
-                              {tx.paymentMethod && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0"
-                                >
-                                  {tx.paymentMethod.name}
-                                </Badge>
-                              )}
-                              {tx.source !== 'manual' && (
-                                <Badge
-                                  className={`text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 border-0 ${sourceColor}`}
-                                >
-                                  {sourceLabel}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {tx.note && (
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {tx.note}
-                                </span>
-                              )}
-                              {tx.type === 'transfer' && tx.paymentMethod && tx.toPaymentMethod && (
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {tx.paymentMethod.name} → {tx.toPaymentMethod.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Amount & actions */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="text-right">
-                              <div className={`text-sm font-semibold ${typeColor}`}>
-                                {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                                {formatCurrency(tx.amount)}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground">
-                                {new Intl.DateTimeFormat('id-ID', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                }).format(new Date(tx.date))}
-                              </div>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
-                              onClick={() => handleOpenEdit(tx)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0"
-                              onClick={() => setDeleteTarget(tx)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatDate(group.date)}
+                          </span>
                         </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </ScrollArea>
+                        <div className="flex items-center gap-3 mt-1">
+                          {dayExpense > 0 && (
+                            <span className="text-xs text-red-600 dark:text-red-400 font-medium">
+                              -{formatCurrency(dayExpense)}
+                            </span>
+                          )}
+                          {dayIncome > 0 && (
+                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                              +{formatCurrency(dayIncome)}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {group.transactions.length} transaksi
+                          </span>
+                        </div>
+                        <Separator className="mt-2" />
+                      </div>
+
+                      {/* Transaction items */}
+                      <div className="divide-y divide-border/30">
+                        {group.transactions.map((tx) => {
+                          const typeColor = TYPE_COLORS[tx.type as keyof typeof TYPE_COLORS] || 'text-foreground'
+                          const typeBgCircle = TYPE_BG_CIRCLE[tx.type as keyof typeof TYPE_BG_CIRCLE] || 'bg-muted'
+                          const typeBorderLeft = TYPE_BORDER_LEFT[tx.type as keyof typeof TYPE_BORDER_LEFT] || ''
+                          const sourceColor = SOURCE_COLORS[tx.source] || ''
+                          const sourceLabel = SOURCE_LABELS[tx.source] || tx.source
+
+                          return (
+                            <div
+                              key={tx.id}
+                              className={`flex items-center gap-3 px-4 py-3 border-l-[3px] ${typeBorderLeft} hover:bg-muted/30 transition-colors duration-150 cursor-default`}
+                            >
+                              {/* Category icon in colored circle */}
+                              <div className={`flex items-center justify-center h-10 w-10 rounded-full ${typeBgCircle} shrink-0 text-lg`}>
+                                {tx.type === 'transfer'
+                                  ? '🔄'
+                                  : tx.category?.icon || '📝'}
+                              </div>
+
+                              {/* Details */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium text-foreground truncate">
+                                    {tx.type === 'transfer'
+                                      ? 'Transfer'
+                                      : tx.category?.name || 'Tanpa Kategori'}
+                                  </span>
+                                  {/* For transfer: show arrow between payment methods */}
+                                  {tx.type === 'transfer' && tx.paymentMethod && tx.toPaymentMethod ? (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-1.5 py-0 h-4 font-normal"
+                                      >
+                                        {tx.paymentMethod.name}
+                                      </Badge>
+                                      <ArrowRight className="h-3 w-3 text-sky-500 shrink-0" />
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-1.5 py-0 h-4 font-normal"
+                                      >
+                                        {tx.toPaymentMethod.name}
+                                      </Badge>
+                                    </div>
+                                  ) : (
+                                    tx.paymentMethod && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0"
+                                      >
+                                        {tx.paymentMethod.name}
+                                      </Badge>
+                                    )
+                                  )}
+                                  {tx.source !== 'manual' && (
+                                    <Badge
+                                      className={`text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 border-0 ${sourceColor}`}
+                                    >
+                                      {sourceLabel}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {tx.note && (
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-xs text-muted-foreground truncate">
+                                      {tx.note}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Amount & actions */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <div className="text-right">
+                                  <div className={`text-sm font-semibold ${typeColor}`}>
+                                    {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
+                                    {formatCurrency(tx.amount)}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {new Intl.DateTimeFormat('id-ID', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    }).format(new Date(tx.date))}
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                                  onClick={() => handleOpenEdit(tx)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0"
+                                  onClick={() => setDeleteTarget(tx)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        </>
       )}
 
       {/* Delete Confirmation Dialog */}

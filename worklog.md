@@ -321,5 +321,324 @@ Stage Summary:
 2. Keyboard shortcuts for quick transaction entry
 3. Mobile responsive design testing and optimization
 4. Transaction pagination/infinite scroll for large datasets
-5. Dashboard total spending by payment method breakdown
+5. ~~Dashboard total spending by payment method breakdown~~ (DONE - R7)
 6. Recurring bill auto-generation (create next month's bill when paid)
+
+---
+Task ID: R7
+Agent: Subagent (full-stack-developer)
+Task: Enhance Dashboard with savings rate, daily average, payment method breakdown
+
+Work Log:
+- Enhanced Dashboard API (/src/app/api/dashboard/route.ts):
+  - Added `savingsRate`: percentage of income saved, calculated as (income - expense) / income * 100, capped at 0 if negative
+  - Added `dailyAverageExpense`: average expense per day for the selected month (totalExpense / daysInMonth)
+  - Added `paymentMethodBreakdown`: array of { paymentMethodId, paymentMethodName, paymentMethodType, totalAmount } showing expense totals by payment method
+  - Added `transactionCount`: total number of transactions for the month
+- Enhanced Dashboard Component (/src/components/dashboard.tsx):
+  - Added greeting text based on time of day ("Selamat Pagi", "Selamat Siang", "Selamat Sore", "Selamat Malam")
+  - Added Stats Row: 3-column grid with Savings Rate (circular progress indicator + PiggyBank icon, green/amber/red), Daily Average (TrendingDown icon, sky color), Transaction Count (Receipt icon, violet color)
+  - Added Payment Method Breakdown Chart: horizontal bar visualization with type-specific icons (Banknote for cash, Smartphone for ewallet, Building2 for bank) and colors (green/purple/sky)
+  - Added pill-shaped month selector container (rounded-full with bg-muted/50)
+  - Added hover scale effect (scale-[1.01]) on summary cards and stats cards
+  - Added CSS transition (duration-500) on summary card amounts
+  - Added gradient separator between dashboard sections (GradientSeparator component)
+  - Added SavingsRateCircle component with SVG circular progress indicator and animated stroke
+  - Updated DashboardData interface with new fields
+  - Updated DashboardSkeleton with new sections (greeting, stats row)
+  - All text in Indonesian (Rasio Tabungan, Rata-rata Harian, Jumlah Transaksi, Pengeluaran per Metode, etc.)
+  - Dark mode supported for all new elements
+- ESLint passes with zero errors
+
+Stage Summary:
+- Dashboard API now returns 4 additional fields: savingsRate, dailyAverageExpense, paymentMethodBreakdown, transactionCount
+- Dashboard has new stats row with savings rate (circular progress), daily average, and transaction count
+- Dashboard has new payment method breakdown section with colored horizontal bars and type icons
+- Visual polish: greeting, pill-shaped month selector, hover effects, gradient separators, CSS transitions
+- All existing functionality preserved
+
+---
+Task ID: R8
+Agent: Subagent (full-stack-developer)
+Task: Create Analytics/Insights page with detailed spending breakdown
+
+Work Log:
+- Created Analytics API route (/src/app/api/analytics/route.ts):
+  - GET endpoint accepting `?month=YYYY-MM` parameter
+  - Returns `categoryBreakdown`: expense breakdown by category with percentage, transaction count
+  - Returns `dailySpending`: daily spending for the month (day 1-31)
+  - Returns `weekDayAverage`: average spending by day of week (Senin-Sabtu-Minggu order)
+  - Returns `topExpenses`: top 5 largest expense transactions with category info
+  - Returns `monthlyComparison`: current vs previous month with expense/income change percentages
+  - Uses Prisma groupBy and aggregate for efficient queries
+- Created Analytics Component (/src/components/analytics.tsx):
+  - Month selector with pill-shaped design (same style as dashboard)
+  - Monthly Comparison Card: expense/income with trend indicators (red if expense increased, green if decreased)
+  - Category Breakdown: horizontal bar chart with category icons, colored bars, amounts and percentages
+  - Daily Spending Pattern: Recharts AreaChart with gradient fill, highlights days with >2x average spending
+  - Week Day Average: Recharts BarChart with Indonesian day names, each bar colored differently
+  - Top Expenses: ranked list with position numbers (gold/silver/bronze styling), category icons, amounts, dates
+  - Loading skeleton for all sections
+  - Error state with retry button
+  - Empty states for each section when no data
+  - Dark mode fully supported
+  - All text in Indonesian
+- Updated /src/lib/store.ts: added 'analytics' to Page type union
+- Updated /src/lib/api.ts: added getAnalytics method
+- Updated /src/app/page.tsx:
+  - Added BarChart3 icon import from lucide-react
+  - Added Analytics dynamic import
+  - Added "Analisis" menu item to aktivitas group (between Dashboard and Transaksi)
+  - Added analytics case to PageContent switch
+  - Added analytics to PageHeader titles
+- ESLint passes with zero errors
+
+Stage Summary:
+- Analytics page fully implemented end-to-end with 5 data visualizations
+- API returns category breakdown, daily spending, weekday averages, top expenses, and monthly comparison
+- Rich UI with Recharts (AreaChart, BarChart), horizontal bars, trend indicators
+- Navigation updated with BarChart3 icon and "Analisis" label
+- All existing functionality preserved
+
+---
+Task ID: R9
+Agent: Subagent (full-stack-developer)
+Task: Add Savings Goals (Tabungan) feature
+
+Work Log:
+- Added SavingsGoal model to prisma/schema.prisma with fields: id, name, targetAmount, currentAmount, targetDate, status (active/completed/cancelled), note, paymentMethodId, createdAt, updatedAt
+- Added `savingsGoals SavingsGoal[]` relation to PaymentMethod model
+- Ran db:push and prisma generate to sync schema
+- Created /src/app/api/savings/route.ts with GET (list all with payment method) and POST (create) endpoints
+- Created /src/app/api/savings/[id]/route.ts with PUT (update) and DELETE endpoints
+- Created /src/app/api/savings/[id]/deposit/route.ts with POST endpoint that:
+  - Increments currentAmount by deposit amount
+  - Auto-sets status to "completed" when currentAmount >= targetAmount
+  - Creates an income-type transaction with source: "savings" and note: "Tabungan: [goal name]"
+- Added savings API methods to /src/lib/api.ts: getSavings, createSavings, updateSavings, deleteSavings, depositSavings
+- Updated /src/lib/store.ts to add 'savings' to Page type union
+- Created /src/components/savings.tsx with full savings management UI:
+  - Header with PiggyBank icon and "Tambah Tabungan" button
+  - Summary Card with gradient background showing total savings, total target, overall progress bar
+  - Filter Tabs (Semua / Aktif / Tercapai)
+  - Savings Goal Cards with:
+    - PiggyBank icon and goal name
+    - Custom progress bar with percentage and color coding (rose/sky/amber/emerald)
+    - Target and current amounts
+    - Days remaining until target date (with overdue highlighting)
+    - Status badge (Aktif = amber, Tercapai = green)
+    - "Setor" (Deposit) button for active goals
+    - Edit and Delete buttons
+  - Add/Edit Dialog with name, target amount (Rp preview), target date, payment method, note fields
+  - Deposit Dialog with:
+    - Current progress preview
+    - Deposit amount input with Rp preview
+    - Payment method selection
+    - Note input
+    - Post-deposit preview showing updated progress and "Target akan tercapai!" celebration
+  - Delete Confirmation AlertDialog
+  - Loading skeleton and empty state
+  - Dark mode fully supported
+  - All text in Indonesian
+- Updated /src/app/page.tsx:
+  - Added PiggyBank icon import from lucide-react
+  - Added Savings dynamic import
+  - Added "Tabungan" menu item to manajemen group (after Wishlist)
+  - Added savings case to PageContent switch
+  - Added savings to PageHeader titles
+- ESLint passes with zero errors
+
+Stage Summary:
+- Savings Goals (Tabungan) feature fully implemented end-to-end
+- Database model with active/completed/cancelled status tracking
+- Deposit action auto-creates income transaction and auto-completes goal when target reached
+- Rich UI with progress bars, deposit preview, filter tabs, and dark mode support
+- Navigation updated with PiggyBank icon and "Tabungan" label in manajemen group
+
+---
+Task ID: R10
+Agent: Subagent (full-stack-developer)
+Task: Improve Transaction form with quick amounts and better UX
+
+Work Log:
+- Rewrote /src/components/transaksi.tsx with comprehensive UX enhancements
+- Added Quick Amount Buttons: pill-shaped buttons (h-7, text-xs) below the nominal input that ADD to the current value
+  - Expense: +10rb, +25rb, +50rb, +100rb, +250rb, +500rb
+  - Income: +500rb, +1jt, +2jt, +5jt
+  - Transfer: +50rb, +100rb, +250rb, +500rb, +1jt
+  - Added "Hapus" button to clear amount when value > 0
+  - Buttons use bg-muted hover:bg-muted/80 with active:scale-95 press animation (framer-motion whileTap)
+- Replaced Category Select dropdown with Visual Category Picker
+  - Categories shown as scrollable grid of rounded buttons with emoji and name
+  - Each button: flex-col with emoji (text-xl) and name (text-[10px]), min-w-[68px]
+  - Selected category gets colored ring-2 matching type (red for expense, green for income)
+  - max-h-48 overflow-y-auto for many categories
+  - WhileTap scale animation on press
+- Replaced Payment Method Select dropdown with Visual Payment Method Picker
+  - Payment methods shown as horizontal scrollable buttons with type icon (Banknote/Smartphone/Building2) and name
+  - Each button has icon in colored circle + name text
+  - Selected method gets colored ring-2 matching active type
+  - Transfer form uses same visual picker for both From and To fields
+- Added Visual Polish:
+  - Success animation: CheckCircle2 icon with spring animation + 8 colorful confetti particles radiating outward, shown for 1.5s after successful submission
+  - Shake animation on validation failure: form fields shake horizontally (8px oscillation, 0.5s duration) when validation fails
+  - Enhanced amount display: larger text (text-3xl sm:text-4xl), gradient background matching type (red/emerald/sky gradient), rounded-xl with border
+  - Recent Transactions section: "Terakhir" section showing last 3 transactions of same type, clickable to pre-fill form values
+  - Tooltip hints: Info icon with Tooltip on Nominal, Kategori, Metode Pembayaran, Tanggal, and Catatan labels
+- Added new imports: framer-motion (motion, AnimatePresence), Tooltip components, ScrollArea, Clock/Info icons, formatDateShort
+- All text in Indonesian
+- Dark mode fully supported
+- ESLint passes with zero errors
+
+Stage Summary:
+- Transaction form completely overhauled with visual pickers replacing plain Select dropdowns
+- Quick amount buttons enable rapid entry of common Indonesian Rupiah amounts
+- Success and shake animations provide clear feedback for user actions
+- Recent transactions section allows one-tap form pre-fill for repeat entries
+- Gradient amount display and tooltip hints improve form clarity
+- All existing functionality preserved (type toggle, form validation, API submission)
+
+---
+Task ID: R11
+Agent: Subagent (full-stack-developer)
+Task: Enhance History page with summary stats and better visual design
+
+Work Log:
+- Added Summary Stats Banner (SummaryStats component) after filter card, before transaction list:
+  - 4 stats: Total Pengeluaran (red), Total Pemasukan (green), Saldo Bersih (teal if positive, red if negative), Jumlah Transaksi (muted)
+  - Icons: ArrowDownLeft, ArrowUpRight, Wallet, Receipt
+  - Colored backgrounds per stat type with dark mode support
+  - 4 columns on desktop, 2 columns on mobile (grid grid-cols-2 md:grid-cols-4)
+  - Hover shadow effect on stat cards
+- Improved Transaction Item Design:
+  - Added 3px left border color indicator: border-l-red-500 (expense), border-l-emerald-500 (income), border-l-sky-500 (transfer)
+  - Changed category icon circle to type-colored background: bg-red-100/red-950/40, bg-emerald-100/emerald-950/40, bg-sky-100/sky-950/40
+  - Added hover:bg-muted/30 with transition-colors duration-150 for subtle hover animation
+  - Transfer transactions now show payment method badges with ArrowRight icon between source and destination
+- Enhanced Date Group Headers:
+  - Added CalendarDays icon next to date label
+  - Added Separator component below date header for more prominent visual separation
+  - Added transaction count per day ("X transaksi")
+  - Kept existing expense/income totals per day
+- Enhanced Filter Bar:
+  - Made filter card collapsible using shadcn/ui Collapsible component
+  - Added ChevronDown icon that rotates when collapsed/expanded
+  - Added transaction count Badge next to "Filter" label
+  - Added green dot indicator when filters are active
+  - Added ActiveFilterPills component: shows removable badge pills for each active filter (search, type, month, category) with Indonesian labels
+  - Enhanced search input with focus-visible:ring-2 focus-visible:ring-primary/50 transition-shadow
+- Enhanced Empty State:
+  - Replaced single circle icon with stacked icons illustration (3 overlapping rounded rectangles with Receipt, Wallet, ArrowUpRight icons at different rotations)
+  - Added "Tambah Transaksi" button that navigates to Transaksi page via setCurrentPage
+  - Enhanced NoResultsState with similar stacked icons illustration (Search + X icons)
+- Updated LoadingSkeleton to include 4 stat card skeletons
+- Added new imports: Collapsible, CollapsibleContent, CollapsibleTrigger, Separator, CalendarDays, ChevronDown, ArrowRight, Wallet
+- Added useAppStore import for navigation to transaksi page
+- Added TYPE_BG_CIRCLE and TYPE_BORDER_LEFT constants for new styling
+- Updated SOURCE_COLORS with dark mode variants
+- All text in Indonesian
+- Dark mode fully supported for all new elements
+- ESLint passes with zero errors
+
+Stage Summary:
+- History page significantly enhanced with summary stats banner showing expenses, income, net balance, and transaction count
+- Transaction items now have colored left border indicators and type-colored icon circles for better visual scanning
+- Transfer transactions display payment method flow with arrow icon between source and destination
+- Filter bar is collapsible with active filter pills for easy individual removal
+- Date group headers have calendar icon, separator, and transaction count per day
+- Empty state has illustrative stacked icons design and quick action button to add transaction
+- All existing functionality preserved (edit, delete, CSV export, search, filters)
+
+---
+Task ID: R12
+Agent: Subagent (full-stack-developer)
+Task: Polish overall app styling with animations and micro-interactions
+
+Work Log:
+- Enhanced sidebar in /src/app/page.tsx:
+  - Added gradient background: from-slate-50 to-white (light), from-slate-950 to-slate-900 (dark)
+  - Added sidebar-menu-hover class for subtle translateX(4px) animation on menu item hover
+  - Added emerald-500 indicator dot next to active menu item icon (absolute positioned)
+  - Added keyboard shortcut badges (⌘1-⌘0) visible on lg+ screens next to menu items
+  - Added Indonesian date format in sidebar footer (e.g., "4 Mei 2026")
+  - Added border-t to sidebar footer for visual separation
+  - Added shortcut field to menuItems array
+- Enhanced PageHeader in /src/app/page.tsx:
+  - Added "back to dashboard" button with ArrowLeft icon
+  - Added gradient border-bottom (from-transparent via-border to-transparent)
+  - Added title-fade-in CSS animation class on h1 title
+- Enhanced Quick-Add FAB in /src/app/page.tsx:
+  - Added pulse ring animation using fab-pulse-ring CSS class (2s infinite scale+fade)
+  - Added Tooltip showing "Tambah Transaksi (Ctrl+N)" on hover
+  - Added hover:scale-110 for hover scale-up effect
+  - Added focus-ring-animated class for focus ring animation
+  - Added relative z-10 to Plus icon to stay above pulse ring
+- Added global micro-interactions to /src/app/globals.css:
+  - Smooth scrolling (scroll-behavior: smooth on html)
+  - Body background-color and color transition (0.3s ease) for theme changes
+  - Custom scrollbar styling: 6px width, rounded, subtle oklch colors, dark mode variants
+  - Focus ring animation utility class (.focus-ring-animated) with pulse keyframe
+  - Card hover utility class (.card-hover) with shadow transition for both light and dark modes
+  - FAB pulse ring keyframe animation (.fab-pulse-ring)
+  - Sidebar menu hover translate utility (.sidebar-menu-hover)
+  - Title fade-in animation (.title-fade-in)
+  - Focus ring pulse keyframe animation
+- Added Tooltip import from shadcn/ui (Tooltip, TooltipContent, TooltipProvider, TooltipTrigger)
+- Added ArrowLeft icon import from lucide-react
+- Removed PanelLeft import (no longer used)
+- ESLint passes with zero errors
+
+Stage Summary:
+- Sidebar has polished gradient background, hover animations, active indicator dots, keyboard shortcut hints, and Indonesian date in footer
+- Page header has back-to-dashboard button, gradient border separator, and animated title
+- FAB button has pulse ring animation, tooltip, and hover scale effect
+- Global CSS includes smooth scrolling, custom scrollbar, focus ring animation, card hover effects
+- All animations use CSS transitions/keyframes for performance (no JS animation overhead)
+- Dark mode fully supported for all new styling
+
+---
+Task ID: R13 (QA Review Round 3)
+Agent: Main
+Task: Final QA testing and project assessment
+
+Work Log:
+- Reviewed worklog.md for all previous work (R7-R12)
+- Verified lint passes with zero errors
+- Tested all 10 API endpoints: dashboard, analytics, savings, transactions, categories, payment-methods, wishlists, bills, budgets
+- Dashboard API returns: savingsRate=33.42, dailyAverageExpense=204032, transactionCount=11, paymentMethodBreakdown with 3 items
+- Analytics API returns: 7 category breakdowns, 31 daily spending data points, 5 top expenses
+- Savings API returns: 0 goals (empty, ready for user to create)
+- All existing data verified: 15 transactions, 12 categories, 6 payment methods, 2 wishlists, 3 bills, 4 budgets
+- Known issue: Dev server (Next.js with Turbopack) is unstable in sandbox environment - process dies after several requests
+- Known issue: Caddy proxy at port 81 doesn't forward to Next.js port 3000 (serves static Z.ai placeholder instead) - Preview Panel should be used instead
+
+Stage Summary:
+- All new features implemented and API-tested successfully
+- 6 major enhancements completed in this round:
+  1. Dashboard: savings rate, daily average, payment method breakdown, greeting
+  2. Analytics page: category breakdown, daily/weekly spending patterns, top expenses, monthly comparison
+  3. Savings Goals (Tabungan): full CRUD with deposit feature, auto-completion
+  4. Transaction form: visual pickers, quick amounts, success/shake animations, recent transactions
+  5. History page: summary stats banner, colored borders, collapsible filters, enhanced empty states
+  6. Global styling: sidebar gradient, hover animations, FAB pulse, custom scrollbar, card hover effects
+
+## Current Project Assessment (Round 3):
+- **Status**: Feature-rich expense tracker with 10 pages and 18+ API endpoints
+- **Build**: Compiles successfully, lint passes with zero errors
+- **Pages**: Dashboard, Analisis, Transaksi, History, Anggaran, Kategori, Wishlist, Tagihan, Tabungan, Metode Bayar
+- **Features**: Full CRUD for all entities, budget tracking, savings goals with deposits, analytics with 5 chart types, CSV export, dark mode, page transitions, visual form pickers, quick amount buttons, success/shake animations
+- **Database**: 6 Prisma models (Category, PaymentMethod, Transaction, Wishlist, Bill, Budget, SavingsGoal)
+- **API**: 18 endpoints (dashboard, analytics, transactions CRUD, categories CRUD, payment-methods CRUD, wishlists CRUD+buy, bills CRUD+pay, budgets CRUD, savings CRUD+deposit)
+
+## Unresolved Issues / Risks:
+1. Dev server stability - Next.js Turbopack process dies after several requests in sandbox environment
+2. Caddy proxy doesn't forward correctly to port 3000 - users should use Preview Panel
+
+## Next Phase Recommendations:
+1. Recurring bill auto-generation (create next month's bill when paid)
+2. Keyboard shortcuts for quick transaction entry (visual hints already added)
+3. Transaction pagination/infinite scroll for large datasets
+4. PDF export for reports
+5. Data backup/restore feature
+6. Multi-currency support
+7. PWA support for offline access
