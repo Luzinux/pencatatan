@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String   @default("📝")
+  type      String   @default("expense") // expense, income, both
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+  wishlists    Wishlist[]
+  bills        Bill[]
+}
+
+model PaymentMethod {
+  id             String   @id @default(cuid())
+  name           String
+  type           String   @default("cash") // cash, ewallet, bank
+  initialBalance Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transactions          Transaction[]
+  transferTransactions  Transaction[] @relation("TransferTo")
+  wishlists             Wishlist[]
+  bills                 Bill[]
+}
+
+model Transaction {
+  id               String   @id @default(cuid())
+  type             String   // expense, income, transfer
+  amount           Float
+  date             DateTime
+  note             String?
+  source           String   @default("manual") // manual, wishlist, bill
+  categoryId       String?
+  paymentMethodId  String?
+  toPaymentMethodId String?  // for transfer
+  wishlistId       String?
+  billId           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  toPaymentMethod PaymentMethod? @relation("TransferTo", fields: [toPaymentMethodId], references: [id])
+  wishlist        Wishlist?      @relation(fields: [wishlistId], references: [id])
+  bill            Bill?          @relation(fields: [billId], references: [id])
+}
+
+model Wishlist {
+  id              String   @id @default(cuid())
+  name            String
+  amount          Float
+  targetDate      DateTime?
+  status          String   @default("pending") // pending, achieved
+  note            String?
+  categoryId      String?
+  paymentMethodId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  category       Category?      @relation(fields: [categoryId], references: [id])
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  transactions   Transaction[]
+}
+
+model Bill {
+  id              String   @id @default(cuid())
+  name            String
+  amount          Float
+  dueDate         DateTime
+  recurring       String   @default("monthly") // none, weekly, monthly, yearly
+  status          String   @default("pending") // pending, paid
+  note            String?
+  categoryId      String?
+  paymentMethodId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  category       Category?      @relation(fields: [categoryId], references: [id])
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  transactions   Transaction[]
+}
