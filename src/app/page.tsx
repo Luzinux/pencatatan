@@ -5,7 +5,7 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter,
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal, Database, FileText } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal, Database, FileText, Bell, TrendingDown, RefreshCw } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { PageTransition } from '@/components/page-transition'
 import { NotificationCenter } from '@/components/notification-center'
@@ -14,7 +14,7 @@ import { formatCurrency, getMonthYear, getMonthLabel } from '@/lib/format'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
 import { CommandPalette } from '@/components/command-palette'
 import dynamic from 'next/dynamic'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 // Dynamic imports for page components to reduce initial bundle
 const Dashboard = dynamic(() => import('@/components/dashboard'), { ssr: false })
@@ -27,22 +27,24 @@ const Metode = dynamic(() => import('@/components/metode'), { ssr: false })
 const Budget = dynamic(() => import('@/components/budget'), { ssr: false })
 const Analytics = dynamic(() => import('@/components/analytics'), { ssr: false })
 const Savings = dynamic(() => import('@/components/savings'), { ssr: false })
+const Recurring = dynamic(() => import('@/components/recurring'), { ssr: false })
 const BackupRestore = dynamic(() => import('@/components/backup-restore'), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports'), { ssr: false })
 
-const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'aktivitas' | 'manajemen'; shortcut: string }[] = [
-  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'aktivitas', shortcut: '⌘1' },
-  { page: 'analytics', label: 'Analisis', icon: BarChart3, group: 'aktivitas', shortcut: '⌘2' },
-  { page: 'transaksi', label: 'Transaksi', icon: ArrowLeftRight, group: 'aktivitas', shortcut: '⌘3' },
-  { page: 'history', label: 'History', icon: History, group: 'aktivitas', shortcut: '⌘4' },
-  { page: 'budget', label: 'Anggaran', icon: Target, group: 'aktivitas', shortcut: '⌘5' },
-  { page: 'reports', label: 'Laporan', icon: FileText, group: 'aktivitas', shortcut: '⌘R' },
-  { page: 'kategori', label: 'Kategori', icon: Tags, group: 'manajemen', shortcut: '⌘6' },
-  { page: 'wishlist', label: 'Wishlist', icon: Heart, group: 'manajemen', shortcut: '⌘7' },
-  { page: 'savings', label: 'Tabungan', icon: PiggyBank, group: 'manajemen', shortcut: '⌘8' },
-  { page: 'tagihan', label: 'Tagihan', icon: Receipt, group: 'manajemen', shortcut: '⌘9' },
-  { page: 'metode', label: 'Metode Bayar', icon: CreditCard, group: 'manajemen', shortcut: '⌘0' },
-  { page: 'backup', label: 'Backup', icon: Database, group: 'manajemen', shortcut: '⌘B' },
+const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'aktivitas' | 'manajemen'; shortcut: string; description: string }[] = [
+  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'aktivitas', shortcut: '⌘1', description: 'Ringkasan keuangan bulanan' },
+  { page: 'analytics', label: 'Analisis', icon: BarChart3, group: 'aktivitas', shortcut: '⌘2', description: 'Analisis pola pengeluaran' },
+  { page: 'transaksi', label: 'Transaksi', icon: ArrowLeftRight, group: 'aktivitas', shortcut: '⌘3', description: 'Tambah transaksi baru' },
+  { page: 'history', label: 'History', icon: History, group: 'aktivitas', shortcut: '⌘4', description: 'Riwayat semua transaksi' },
+  { page: 'budget', label: 'Anggaran', icon: Target, group: 'aktivitas', shortcut: '⌘5', description: 'Anggaran per kategori' },
+  { page: 'reports', label: 'Laporan', icon: FileText, group: 'aktivitas', shortcut: '⌘R', description: 'Cetak laporan keuangan' },
+  { page: 'kategori', label: 'Kategori', icon: Tags, group: 'manajemen', shortcut: '⌘6', description: 'Kelola kategori pemasukan/pengeluaran' },
+  { page: 'wishlist', label: 'Wishlist', icon: Heart, group: 'manajemen', shortcut: '⌘7', description: 'Daftar keinginan belanja' },
+  { page: 'savings', label: 'Tabungan', icon: PiggyBank, group: 'manajemen', shortcut: '⌘8', description: 'Target tabungan' },
+  { page: 'recurring', label: 'Berulang', icon: RefreshCw, group: 'manajemen', shortcut: '⌘E', description: 'Transaksi berulang otomatis' },
+  { page: 'tagihan', label: 'Tagihan', icon: Receipt, group: 'manajemen', shortcut: '⌘9', description: 'Tagihan & pembayaran rutin' },
+  { page: 'metode', label: 'Metode Bayar', icon: CreditCard, group: 'manajemen', shortcut: '⌘0', description: 'Kelola metode pembayaran' },
+  { page: 'backup', label: 'Backup', icon: Database, group: 'manajemen', shortcut: '⌘B', description: 'Backup & pulihkan data' },
 ]
 
 const BULAN_INDONESIA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -79,7 +81,7 @@ function SidebarBalanceWidget() {
       </div>
       <div className="flex items-baseline gap-1">
         {balance !== null ? (
-          <span className={`text-sm font-bold ${balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+          <span className={`text-sm font-bold stat-value ${balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
             {formatCurrency(balance)}
           </span>
         ) : (
@@ -87,6 +89,53 @@ function SidebarBalanceWidget() {
         )}
       </div>
       <span className="text-[10px] text-muted-foreground/70">{monthLabel}</span>
+    </div>
+  )
+}
+
+// ─── Sidebar Quick Stats Mini Bar ─────────────────────────────────────────
+function SidebarQuickStats() {
+  const [todayExpense, setTodayExpense] = useState<number>(0)
+  const [weekExpense, setWeekExpense] = useState<number>(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - dayOfWeek)
+    weekStart.setHours(0, 0, 0, 0)
+
+    api.getTransactions().then((data: any) => {
+      if (cancelled) return
+      const txList = Array.isArray(data) ? data : data.transactions || []
+      const today = txList
+        .filter((t: any) => t.type === 'expense' && new Date(t.date).toISOString().split('T')[0] === todayStr)
+        .reduce((s: number, t: any) => s + t.amount, 0)
+      const week = txList
+        .filter((t: any) => t.type === 'expense' && new Date(t.date) >= weekStart)
+        .reduce((s: number, t: any) => s + t.amount, 0)
+      setTodayExpense(today)
+      setWeekExpense(week)
+    }).catch(() => {})
+
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-2.5 py-1.5">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <TrendingDown className="h-3 w-3 text-red-500 shrink-0" />
+        <span className="text-[10px] text-muted-foreground truncate">Hari ini</span>
+        <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 truncate">{formatCurrency(todayExpense)}</span>
+      </div>
+      <div className="w-px h-3 bg-border shrink-0" />
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Receipt className="h-3 w-3 text-amber-500 shrink-0" />
+        <span className="text-[10px] text-muted-foreground truncate">Minggu</span>
+        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate">{formatCurrency(weekExpense)}</span>
+      </div>
     </div>
   )
 }
@@ -150,36 +199,51 @@ function AppSidebar() {
                 const isActive = currentPage === item.page
                 return (
                   <SidebarMenuItem key={item.page}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => {
-                        setCurrentPage(item.page)
-                        setSidebarOpen(false)
-                      }}
-                      tooltip={item.label}
-                      className={`sidebar-menu-hover ${isActive
-                        ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
-                        : "pl-3"
-                      }`}
-                    >
-                      <div className="relative">
-                        <item.icon className="size-4" />
-                        {isActive && (
-                          <span className="absolute -left-1.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        )}
-                      </div>
-                      <span className="flex-1">{item.label}</span>
-                      <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
-                        {item.shortcut}
-                      </span>
-                    </SidebarMenuButton>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            onClick={() => {
+                              setCurrentPage(item.page)
+                              setSidebarOpen(false)
+                            }}
+                            tooltip={item.label}
+                            className={`sidebar-menu-hover ${isActive
+                              ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
+                              : "pl-3"
+                            }`}
+                          >
+                            <div className="relative">
+                              <item.icon className="size-4" />
+                              {isActive && (
+                                <span className="absolute -left-1.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              )}
+                            </div>
+                            <span className="flex-1">{item.label}</span>
+                            <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
+                              {item.shortcut}
+                            </span>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-[200px]">
+                          <p className="font-medium">{item.label}</p>
+                          <p className="text-muted-foreground mt-0.5">{item.description}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </SidebarMenuItem>
                 )
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarSeparator />
+        {/* Divider with ••• decoration */}
+        <div className="flex items-center justify-center py-1">
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+          <span className="px-2 text-[8px] text-muted-foreground/40 select-none">•••</span>
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+        </div>
         <SidebarGroup>
           <SidebarGroupLabel>Manajemen</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -188,43 +252,53 @@ function AppSidebar() {
                 const isActive = currentPage === item.page
                 return (
                   <SidebarMenuItem key={item.page}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => {
-                        setCurrentPage(item.page)
-                        setSidebarOpen(false)
-                      }}
-                      tooltip={item.label}
-                      className={`sidebar-menu-hover ${isActive
-                        ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
-                        : "pl-3"
-                      }`}
-                    >
-                      <div className="relative">
-                        <item.icon className="size-4" />
-                        {isActive && (
-                          <span className="absolute -left-1.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        )}
-                        {/* Notification badge for Tagihan */}
-                        {item.page === 'tagihan' && urgentBillCount > 0 && (
-                          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                            {urgentBillCount > 9 ? '9+' : urgentBillCount}
-                          </span>
-                        )}
-                      </div>
-                      <span className="flex-1">{item.label}</span>
-                      {/* Bill count badge on text side for clarity */}
-                      {item.page === 'tagihan' && urgentBillCount > 0 && (
-                        <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-100 dark:bg-red-900/40 text-[9px] font-bold text-red-600 dark:text-red-400">
-                          {urgentBillCount}
-                        </span>
-                      )}
-                      {item.page !== 'tagihan' && (
-                        <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
-                          {item.shortcut}
-                        </span>
-                      )}
-                    </SidebarMenuButton>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            onClick={() => {
+                              setCurrentPage(item.page)
+                              setSidebarOpen(false)
+                            }}
+                            tooltip={item.label}
+                            className={`sidebar-menu-hover ${isActive
+                              ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
+                              : "pl-3"
+                            }`}
+                          >
+                            <div className="relative">
+                              <item.icon className="size-4" />
+                              {isActive && (
+                                <span className="absolute -left-1.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              )}
+                              {/* Notification badge for Tagihan */}
+                              {item.page === 'tagihan' && urgentBillCount > 0 && (
+                                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white bell-pulse">
+                                  {urgentBillCount > 9 ? '9+' : urgentBillCount}
+                                </span>
+                              )}
+                            </div>
+                            <span className="flex-1">{item.label}</span>
+                            {/* Bill count badge on text side for clarity */}
+                            {item.page === 'tagihan' && urgentBillCount > 0 && (
+                              <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-100 dark:bg-red-900/40 text-[9px] font-bold text-red-600 dark:text-red-400">
+                                {urgentBillCount}
+                              </span>
+                            )}
+                            {item.page !== 'tagihan' && (
+                              <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
+                                {item.shortcut}
+                              </span>
+                            )}
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-[200px]">
+                          <p className="font-medium">{item.label}</p>
+                          <p className="text-muted-foreground mt-0.5">{item.description}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </SidebarMenuItem>
                 )
               })}
@@ -233,7 +307,9 @@ function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 border-t">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
+          {/* Quick Stats Mini Bar */}
+          <SidebarQuickStats />
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">DompetKu v1.0</span>
             <ThemeToggle />
@@ -268,6 +344,8 @@ function PageContent() {
       return <Wishlist />
     case 'savings':
       return <Savings />
+    case 'recurring':
+      return <Recurring />
     case 'tagihan':
       return <Tagihan />
     case 'metode':
@@ -292,6 +370,7 @@ function PageHeader() {
     kategori: 'Kategori',
     wishlist: 'Wishlist',
     savings: 'Tabungan',
+    recurring: 'Transaksi Berulang',
     tagihan: 'Tagihan',
     metode: 'Metode Pembayaran',
     backup: 'Backup & Pulihkan',
@@ -332,7 +411,7 @@ function QuickAddFAB() {
         <TooltipTrigger asChild>
           <button
             onClick={() => setCurrentPage('transaksi')}
-            className="fixed bottom-6 right-6 z-50 hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-110 active:scale-95 transition-all focus-ring-animated"
+            className="fixed bottom-6 right-6 z-50 hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-110 active:scale-95 transition-all focus-ring-animated press-scale"
             aria-label="Tambah Transaksi"
           >
             {/* Pulse ring */}
@@ -362,6 +441,7 @@ const moreMenuItems: { page: Page; label: string; icon: React.ElementType }[] = 
   { page: 'kategori', label: 'Kategori', icon: Tags },
   { page: 'wishlist', label: 'Wishlist', icon: Heart },
   { page: 'savings', label: 'Tabungan', icon: PiggyBank },
+  { page: 'recurring', label: 'Berulang', icon: RefreshCw },
   { page: 'tagihan', label: 'Tagihan', icon: Receipt },
   { page: 'metode', label: 'Metode Bayar', icon: CreditCard },
   { page: 'backup', label: 'Backup', icon: Database },

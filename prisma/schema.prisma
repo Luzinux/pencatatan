@@ -15,10 +15,11 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  transactions Transaction[]
-  wishlists    Wishlist[]
-  bills        Bill[]
-  budgets      Budget[]
+  transactions         Transaction[]
+  wishlists            Wishlist[]
+  bills                Bill[]
+  budgets              Budget[]
+  recurringTransactions RecurringTransaction[]
 }
 
 model PaymentMethod {
@@ -31,9 +32,11 @@ model PaymentMethod {
 
   transactions          Transaction[]
   transferTransactions  Transaction[] @relation("TransferTo")
+  recurringTransferTo   RecurringTransaction[] @relation("RecurringTransferTo")
   wishlists             Wishlist[]
   bills                 Bill[]
   savingsGoals          SavingsGoal[]
+  recurringTransactions RecurringTransaction[]
 }
 
 model Transaction {
@@ -117,4 +120,29 @@ model SavingsGoal {
   updatedAt       DateTime @updatedAt
 
   paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+}
+
+model RecurringTransaction {
+  id                String    @id @default(cuid())
+  name              String
+  type              String    // expense, income, transfer
+  amount            Float
+  categoryId        String?
+  paymentMethodId   String?
+  toPaymentMethodId String?
+  note              String?
+  frequency         String    // daily, weekly, monthly, yearly
+  dayOfWeek         Int?      // 0-6, for weekly
+  dayOfMonth        Int?      // 1-31, for monthly/yearly
+  startDate         DateTime
+  nextDate          DateTime
+  endDate           DateTime?
+  active            Boolean   @default(true)
+  lastGeneratedDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category        Category?      @relation(fields: [categoryId], references: [id])
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  toPaymentMethod PaymentMethod? @relation("RecurringTransferTo", fields: [toPaymentMethodId], references: [id])
 }

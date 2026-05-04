@@ -122,6 +122,7 @@
   body {
     @apply bg-background text-foreground;
     transition: background-color 0.3s ease, color 0.3s ease;
+    animation: page-fade-in 0.4s ease-out;
   }
 }
 
@@ -472,4 +473,134 @@
 }
 .dark ::selection {
   background: oklch(0.527 0.099 164.277 / 40%);
+}
+
+/* ── Page Loading Animation ──────────────────────────────────────────────── */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    filter: grayscale(20%);
+  }
+  to {
+    opacity: 1;
+    filter: grayscale(0%);
+  }
+}
+.page-fade-in {
+  animation: page-fade-in 0.4s ease-out;
+}
+
+/* ── Stat Value Utility ──────────────────────────────────────────────────── */
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* ── Section Card Utility ────────────────────────────────────────────────── */
+.section-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 5%), 0 1px 2px oklch(0 0 0 / 3%);
+  background: var(--card);
+}
+.dark .section-card {
+  box-shadow: 0 1px 3px oklch(0 0 0 / 20%), 0 1px 2px oklch(0 0 0 / 10%);
+}
+
+/* ── Gradient Text Utility ───────────────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, oklch(0.527 0.099 164.277), oklch(0.627 0.194 149.214));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.gradient-text-warm {
+  background: linear-gradient(135deg, oklch(0.637 0.237 25.331), oklch(0.723 0.219 149.579));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Press Scale Micro-interaction ────────────────────────────────────────── */
+.press-scale {
+  transition: transform 0.1s ease;
+}
+.press-scale:active {
+  transform: scale(0.96);
+}
+
+/* ── Max-height Transition Utility ───────────────────────────────────────── */
+.max-height-transition {
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+}
+.max-height-transition.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+.max-height-transition.expanded {
+  max-height: 1000px;
+  opacity: 1;
+}
+
+/* ── Dot Pattern Background ──────────────────────────────────────────────── */
+.dot-pattern {
+  background-image: radial-gradient(circle, currentColor 0.5px, transparent 0.5px);
+  background-size: 16px 16px;
+}
+
+/* ── Value Pulse Animation ───────────────────────────────────────────────── */
+@keyframes value-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+.value-pulse {
+  animation: value-pulse 0.4s ease-in-out;
+}
+
+/* ── Notification Bell Pulse ─────────────────────────────────────────────── */
+@keyframes bell-ring {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  45% { transform: rotate(6deg); }
+  60% { transform: rotate(-4deg); }
+  75% { transform: rotate(2deg); }
+  100% { transform: rotate(0deg); }
+}
+.bell-pulse {
+  animation: bell-ring 1s ease-in-out;
+  transform-origin: top center;
+}
+
+/* ── Gradient Shift on Hover ─────────────────────────────────────────────── */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.gradient-shift-hover {
+  background-size: 200% 200%;
+  transition: background-position 0.3s ease;
+}
+.gradient-shift-hover:hover {
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* ── Scroll-to-top FAB ───────────────────────────────────────────────────── */
+@keyframes fab-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.scroll-top-fab {
+  animation: fab-entrance 0.25s ease-out;
 }

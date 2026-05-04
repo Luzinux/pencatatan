@@ -103,6 +103,22 @@ export const api = {
   getReports: (month: string) =>
     fetchJSON<any>(`/reports?month=${month}`),
 
+  // Recurring Transactions
+  getRecurring: () =>
+    fetchJSON<any[]>('/recurring'),
+  createRecurring: (data: any) =>
+    fetchJSON<any>('/recurring', { method: 'POST', body: JSON.stringify(data) }),
+  updateRecurring: (id: string, data: any) =>
+    fetchJSON<any>(`/recurring/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRecurring: (id: string) =>
+    fetchJSON<any>(`/recurring/${id}`, { method: 'DELETE' }),
+  generateRecurring: (id: string) =>
+    fetchJSON<any>(`/recurring/${id}/generate`, { method: 'POST' }),
+
+  // Streak
+  getStreak: (month?: string) =>
+    fetchJSON<any>(`/streak${month ? `?month=${month}` : ''}`),
+
   // Spending Heatmap
   getSpendingHeatmap: (month?: string) =>
     fetchJSON<{ month: string; days: { date: string; amount: number; count: number }[] }>(`/spending-heatmap${month ? `?month=${month}` : ''}`),

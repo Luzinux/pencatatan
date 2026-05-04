@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type Page = 'dashboard' | 'analytics' | 'transaksi' | 'history' | 'budget' | 'reports' | 'kategori' | 'wishlist' | 'tagihan' | 'metode' | 'savings' | 'backup'
+export type Page = 'dashboard' | 'analytics' | 'transaksi' | 'history' | 'budget' | 'reports' | 'kategori' | 'wishlist' | 'tagihan' | 'metode' | 'savings' | 'backup' | 'recurring'
 
 export interface TransactionTemplate {
   type: string

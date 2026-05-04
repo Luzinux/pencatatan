@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate, getMonthYear, getMonthLabel } from '@/lib/format'
 import { useAnimatedCounter } from '@/hooks/use-animated-counter'
@@ -37,8 +37,11 @@ import {
   Gift,
   Star,
   Activity,
+  Flame,
+  Trophy,
+  PartyPopper,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import ReportPrint from '@/components/report-print'
 import SpendingHeatmap from '@/components/spending-heatmap'
 import {
@@ -673,14 +676,16 @@ function MonthComparisonText({ current, previous, type }: { current: number; pre
         : isUp
 
   return (
-    <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${isPositive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}
+    >
       {isUp ? (
         <TrendingUp className="h-3 w-3" />
       ) : (
         <TrendingDown className="h-3 w-3" />
       )}
-      <span>vs bulan lalu {Math.abs(change).toFixed(0)}%</span>
-    </div>
+      {isUp ? '↑ Naik' : '↓ Turun'} {Math.abs(change).toFixed(0)}%
+    </span>
   )
 }
 
@@ -1094,6 +1099,279 @@ function ActivityTimeline({ data }: { data: DashboardData }) {
   )
 }
 
+// ── Streak Tracker (Tantangan Hemat) ──────────────────────────────────────────
+interface StreakData {
+  currentStreak: number
+  longestStreak: number
+  dailyBudget: number
+  dailySpending: Array<{
+    date: string
+    day: number
+    amount: number
+    withinBudget: boolean
+    isPast: boolean
+    isToday: boolean
+    isFuture: boolean
+  }>
+  totalDaysWithinBudget: number
+  totalDaysInMonth: number
+  hasBudgets: boolean
+}
+
+const STREAK_MILESTONES = [7, 14, 21, 30]
+
+function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
+  const angle = (delay / 12) * 360
+  const radians = (angle * Math.PI) / 180
+  const distance = 40 + Math.random() * 30
+
+  return (
+    <motion.div
+      className="absolute h-2 w-2 rounded-full"
+      style={{ backgroundColor: color }}
+      initial={{ opacity: 1, scale: 0, x: 0, y: 0 }}
+      animate={{
+        opacity: [1, 1, 0],
+        scale: [0, 1, 0.5],
+        x: [0, Math.cos(radians) * distance],
+        y: [0, Math.sin(radians) * distance],
+      }}
+      transition={{ duration: 1.2, delay: delay * 0.05, ease: 'easeOut' }}
+    />
+  )
+}
+
+function ConfettiBurst({ show }: { show: boolean }) {
+  if (!show) return null
+  const colors = ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#8b5cf6', '#ec4899']
+
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <ConfettiParticle key={i} delay={i} color={colors[i % colors.length]} />
+      ))}
+    </div>
+  )
+}
+
+function StreakTracker({ month, hasBudgets }: { month: string; hasBudgets: boolean }) {
+  const [streakData, setStreakData] = useState<StreakData | null>(null)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const prevStreakRef = useRef(0)
+
+  useEffect(() => {
+    let cancelled = false
+    api.getStreak(month).then((data: StreakData) => {
+      if (!cancelled) {
+        // Check if streak hit a milestone
+        if (data.hasBudgets && data.currentStreak > 0) {
+          const hitMilestone = STREAK_MILESTONES.some(
+            m => data.currentStreak >= m && prevStreakRef.current < m
+          )
+          if (hitMilestone) {
+            setShowConfetti(true)
+            setTimeout(() => setShowConfetti(false), 3000)
+          }
+        }
+        setStreakData(data)
+        prevStreakRef.current = data.currentStreak
+      }
+    }).catch(() => {
+      if (!cancelled) setStreakData(null)
+    })
+    return () => { cancelled = true }
+  }, [month])
+
+  if (!hasBudgets || !streakData || !streakData.hasBudgets) return null
+
+  const { currentStreak, longestStreak, dailyBudget, dailySpending, totalDaysWithinBudget, totalDaysInMonth } = streakData
+
+  // Find today's spending
+  const todayData = dailySpending.find(d => d.isToday)
+  const todaySpending = todayData?.amount ?? 0
+  const isTodayWithinBudget = todayData?.withinBudget ?? true
+
+  // Count how many days into the month
+  const today = new Date()
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      <Card className="relative overflow-hidden">
+        {/* Top gradient accent */}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-orange-500 via-amber-500 to-emerald-500" />
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2.5 text-base">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/30">
+              <Flame className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            </div>
+            Tantangan Hemat
+            <span className="text-xs font-normal text-muted-foreground">
+              {today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Streak Counter + Stats */}
+          <div className="flex items-center gap-4">
+            <div className="relative flex flex-col items-center justify-center">
+              <ConfettiBurst show={showConfetti} />
+              <motion.div
+                key={currentStreak}
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/40 dark:to-amber-900/40 border-2 border-orange-200 dark:border-orange-800/60"
+              >
+                <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {currentStreak}
+                </span>
+              </motion.div>
+              <span className="mt-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                hari hemat
+              </span>
+              {currentStreak > 0 && (
+                <span className="text-lg absolute -top-1 -right-1">
+                  🔥
+                </span>
+              )}
+            </div>
+            <div className="flex-1 space-y-2">
+              {/* Daily Budget */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Anggaran Harian</span>
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(dailyBudget)}
+                </span>
+              </div>
+              {/* Today's Spending */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Pengeluaran Hari Ini</span>
+                <span className={`text-xs font-semibold ${isTodayWithinBudget ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {formatCurrency(todaySpending)}
+                </span>
+              </div>
+              {/* Longest Streak */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Trophy className="h-3 w-3" />
+                  Rekor Terpanjang
+                </span>
+                <span className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  {longestStreak} hari
+                </span>
+              </div>
+              {/* Days within budget */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Hari Sesuai Anggaran</span>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {totalDaysWithinBudget}/{totalDaysInMonth}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Milestone Progress */}
+          {currentStreak > 0 && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                {STREAK_MILESTONES.map(milestone => {
+                  const reached = currentStreak >= milestone
+                  const prevMilestone = STREAK_MILESTONES[STREAK_MILESTONES.indexOf(milestone) - 1] || 0
+                  const isNext = !reached && currentStreak < milestone && (STREAK_MILESTONES.indexOf(milestone) === 0 || currentStreak >= prevMilestone)
+                  const progressPct = ((currentStreak % prevMilestone) / (milestone - prevMilestone)) * 100
+                  return (
+                    <div key={milestone} className="flex-1">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <div className={`h-2 flex-1 rounded-full ${reached ? 'bg-orange-500' : isNext ? 'bg-orange-200 dark:bg-orange-800/40' : 'bg-muted'}`}>
+                          {isNext && (
+                            <motion.div
+                              className="h-full rounded-full bg-orange-500"
+                              initial={{ width: '0%' }}
+                              animate={{ width: `${progressPct}%` }}
+                              transition={{ duration: 0.8, ease: 'easeOut' }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <span className={`text-[9px] font-medium ${reached ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground/50'}`}>
+                        {milestone}h
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Monthly Calendar Grid */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">Kalender Bulan Ini</p>
+            <div className="grid grid-cols-7 gap-1">
+              {/* Day headers */}
+              {['S', 'S', 'R', 'K', 'J', 'S', 'M'].map((d, i) => (
+                <div key={i} className="flex items-center justify-center h-5 text-[9px] font-medium text-muted-foreground/60">
+                  {d}
+                </div>
+              ))}
+              {/* Empty cells for first day offset */}
+              {Array.from({ length: new Date(today.getFullYear(), today.getMonth(), 1).getDay() }).map((_, i) => (
+                <div key={`empty-${i}`} />
+              ))}
+              {/* Day dots */}
+              {dailySpending.map((day) => {
+                const dotColor = day.isFuture
+                  ? 'bg-muted/40'
+                  : day.withinBudget
+                    ? 'bg-emerald-500'
+                    : 'bg-red-500'
+
+                return (
+                  <motion.div
+                    key={day.day}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.2, delay: day.day * 0.015 }}
+                    className={`flex items-center justify-center h-6 rounded-full text-[9px] font-medium relative ${
+                      day.isToday
+                        ? 'ring-2 ring-orange-400 dark:ring-orange-500 ring-offset-1 ring-offset-background'
+                        : ''
+                    }`}
+                  >
+                    <div className={`h-5 w-5 rounded-full ${dotColor} flex items-center justify-center`}>
+                      <span className={`${day.isFuture ? 'text-muted-foreground/40' : 'text-white'}`}>
+                        {day.day}
+                      </span>
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+            {/* Legend */}
+            <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                <span>Sesuai anggaran</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                <span>Melebihi anggaran</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="h-2.5 w-2.5 rounded-full bg-muted/40" />
+                <span>Akan datang</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
 // ── Main Dashboard Component ───────────────────────────────────────────────
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(getMonthYear())
@@ -1159,6 +1437,14 @@ export default function Dashboard() {
     if (!data) return null
     return calculateHealthScore(data)
   }, [data])
+
+  // ── Motivational tip based on health score ────────────────────────────
+  const motivationalTip = useMemo(() => {
+    if (!healthScore) return ''
+    if (healthScore.score > 70) return 'Keuanganmu dalam kondisi sehat! 🎉'
+    if (healthScore.score > 40) return 'Terus jaga keuanganmu, hampir sehat! 💪'
+    return 'Yuk mulai hemat dari sekarang 💪'
+  }, [healthScore])
 
   // ── Smart Insights ──────────────────────────────────────────────────────
   const insights = useMemo(() => {
@@ -1232,13 +1518,53 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* ── Greeting ──────────────────────────────────────────────────── */}
+      {/* ── Greeting + Welcome Card ─────────────────────────────────── */}
       <div className="space-y-0.5">
         <h2 className="text-lg font-semibold">{getGreeting()} 👋</h2>
         <p className="text-sm text-muted-foreground">
           Berikut ringkasan keuangan kamu
         </p>
       </div>
+
+      {/* ── Welcome / Motivational Card ────────────────────────────────── */}
+      {healthScore && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className={`relative overflow-hidden rounded-xl border p-4 ${
+            healthScore.score > 70
+              ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border-emerald-200/50 dark:from-emerald-950/20 dark:via-teal-950/20 dark:to-cyan-950/20 dark:border-emerald-800/30'
+              : healthScore.score > 40
+                ? 'bg-gradient-to-r from-amber-50 via-yellow-50 to-orange-50 border-amber-200/50 dark:from-amber-950/20 dark:via-yellow-950/20 dark:to-orange-950/20 dark:border-amber-800/30'
+                : 'bg-gradient-to-r from-red-50 via-rose-50 to-pink-50 border-red-200/50 dark:from-red-950/20 dark:via-rose-950/20 dark:to-pink-950/20 dark:border-red-800/30'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-full shrink-0 ${
+              healthScore.score > 70
+                ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                : healthScore.score > 40
+                  ? 'bg-amber-100 dark:bg-amber-900/40'
+                  : 'bg-red-100 dark:bg-red-900/40'
+            }`}>
+              {healthScore.score > 70 ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              ) : healthScore.score > 40 ? (
+                <Lightbulb className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{motivationalTip}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Skor keuanganmu: <span className="font-semibold" style={{ color: healthScore.statusColor }}>{healthScore.score}/100</span>
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* ── Month Selector (Pill) + Print Button ──────────────────────── */}
       <div className="flex items-center justify-center gap-2">
@@ -1270,14 +1596,19 @@ export default function Dashboard() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <ReportPrint currentMonth={currentMonth} />
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <ReportPrint currentMonth={currentMonth} />
+        </motion.div>
       </div>
 
       {/* ── Summary Cards with Sparkline & Gradient Border ──────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Pengeluaran */}
         <GradientBorderCard>
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-red-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-red-950/20 dark:to-card">
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-red-50 via-red-100/30 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] gradient-shift-hover dark:from-red-950/20 dark:via-red-900/10 dark:to-card">
             {/* Decorative ring behind amount */}
             <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-red-100/40 dark:border-red-900/20" />
             <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
@@ -1291,7 +1622,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-3xl font-bold tabular-nums text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400">
+                  <p className="text-3xl font-bold tabular-nums text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400 stat-value">
                     {formatCurrency(animatedExpense)}
                   </p>
                   {prevMonthTrend && currentMonthTrend && (
@@ -1312,7 +1643,7 @@ export default function Dashboard() {
 
         {/* Total Pemasukan */}
         <GradientBorderCard>
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-green-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-green-950/20 dark:to-card">
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-green-50 via-green-100/30 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] gradient-shift-hover dark:from-green-950/20 dark:via-green-900/10 dark:to-card">
             {/* Decorative ring behind amount */}
             <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-green-100/40 dark:border-green-900/20" />
             <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
@@ -1326,7 +1657,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="flex items-end justify-between">
                 <div>
-                  <p className="text-3xl font-bold tabular-nums text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400">
+                  <p className="text-3xl font-bold tabular-nums text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400 stat-value">
                     {formatCurrency(animatedIncome)}
                   </p>
                   {prevMonthTrend && currentMonthTrend && (
@@ -1347,7 +1678,7 @@ export default function Dashboard() {
 
         {/* Sisa Uang */}
         <GradientBorderCard>
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-teal-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-teal-950/20 dark:to-card">
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-teal-50 via-teal-100/30 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] gradient-shift-hover dark:from-teal-950/20 dark:via-teal-900/10 dark:to-card">
             {/* Decorative ring behind amount */}
             <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-teal-100/40 dark:border-teal-900/20" />
             <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
@@ -1362,7 +1693,7 @@ export default function Dashboard() {
               <div className="flex items-end justify-between">
                 <div>
                   <p
-                    className={`text-3xl font-bold tabular-nums transition-all duration-500 sm:text-4xl ${
+                    className={`text-3xl font-bold tabular-nums transition-all duration-500 sm:text-4xl stat-value ${
                       data.balance >= 0
                         ? 'text-teal-600 dark:text-teal-400'
                         : 'text-red-600 dark:text-red-400'
@@ -1396,6 +1727,8 @@ export default function Dashboard() {
           {/* Health Score Card */}
           <Card className="relative overflow-hidden">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500" />
+            {/* Dot pattern background */}
+            <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] dot-pattern text-foreground pointer-events-none" />
             <CardContent className="p-6">
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <HealthScoreGauge healthScore={healthScore} />
@@ -1953,6 +2286,9 @@ export default function Dashboard() {
       </Card>
 
       <GradientSeparator />
+
+      {/* ── Streak Tracker (Tantangan Hemat) ──────────────────────────────── */}
+      <StreakTracker month={currentMonth} hasBudgets={hasBudgets} />
 
       {/* ── Activity Timeline ───────────────────────────────────────────── */}
       <Card className="relative overflow-hidden">

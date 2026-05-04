@@ -46,6 +46,13 @@ export function useKeyboardShortcuts({
         return
       }
 
+      // Cmd/Ctrl + E → Navigate to Recurring Transactions
+      if (isMod && event.key === 'e') {
+        event.preventDefault()
+        setCurrentPage('recurring')
+        return
+      }
+
       // Cmd/Ctrl + B → Navigate to Backup
       if (isMod && event.key === 'b') {
         event.preventDefault()

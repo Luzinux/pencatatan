@@ -1,10 +1,11 @@
 export function formatCurrency(amount: number): string {
+  const num = typeof amount === 'number' && !isNaN(amount) ? amount : 0
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(num)
 }
 
 export function formatDate(date: string | Date): string {

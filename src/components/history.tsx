@@ -63,6 +63,9 @@ import {
   RotateCcw,
   ChevronLeft,
   Copy,
+  ArrowUp,
+  TrendingDown,
+  Target,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/hooks/use-toast'
@@ -244,21 +247,24 @@ function LoadingSkeleton() {
 function EmptyState({ onAddClick }: { onAddClick?: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-      {/* Stacked icons illustration */}
-      <div className="relative w-28 h-28 mb-6">
+      {/* 3 overlapping gradient cards illustration */}
+      <div className="relative w-36 h-36 mb-6">
+        {/* Back card */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-20 h-20 rounded-2xl bg-muted/60 dark:bg-muted/30 flex items-center justify-center rotate-6">
-            <Receipt className="h-9 w-9 text-muted-foreground/50" />
+          <div className="w-24 h-28 rounded-2xl bg-gradient-to-br from-red-100 to-red-200/50 dark:from-red-900/30 dark:to-red-800/20 flex items-center justify-center rotate-12 translate-x-2 shadow-sm border border-red-200/30 dark:border-red-800/20">
+            <Receipt className="h-8 w-8 text-red-400/60 dark:text-red-500/40" />
           </div>
         </div>
+        {/* Middle card */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-muted/80 dark:bg-muted/50 flex items-center justify-center -rotate-3 translate-y-1">
-            <Wallet className="h-7 w-7 text-muted-foreground/70" />
+          <div className="w-20 h-24 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-200/50 dark:from-emerald-900/30 dark:to-teal-800/20 flex items-center justify-center -rotate-3 translate-y-1 shadow-sm border border-emerald-200/30 dark:border-emerald-800/20">
+            <Wallet className="h-7 w-7 text-emerald-400/60 dark:text-emerald-500/40" />
           </div>
         </div>
+        {/* Front card */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-12 h-12 rounded-xl bg-muted dark:bg-muted/80 flex items-center justify-center -rotate-6 -translate-y-1">
-            <ArrowUpRight className="h-5 w-5 text-muted-foreground" />
+          <div className="w-16 h-20 rounded-xl bg-gradient-to-br from-violet-100 to-purple-200/50 dark:from-violet-900/30 dark:to-purple-800/20 flex items-center justify-center -rotate-6 -translate-y-2 shadow-sm border border-violet-200/30 dark:border-violet-800/20">
+            <ArrowUpRight className="h-5 w-5 text-violet-400/60 dark:text-violet-500/40" />
           </div>
         </div>
       </div>
@@ -269,7 +275,7 @@ function EmptyState({ onAddClick }: { onAddClick?: () => void }) {
         Tambahkan transaksi pertama untuk mulai mencatat keuangan Anda
       </p>
       {onAddClick && (
-        <Button onClick={onAddClick} className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+        <Button onClick={onAddClick} className="gap-2 bg-emerald-600 hover:bg-emerald-700 press-scale">
           <Plus className="h-4 w-4" />
           Tambah Transaksi
         </Button>
@@ -283,13 +289,13 @@ function NoResultsState({ onClear }: { onClear: () => void }) {
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
       <div className="relative w-28 h-28 mb-6">
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-20 h-20 rounded-2xl bg-muted/60 dark:bg-muted/30 flex items-center justify-center rotate-3">
-            <Search className="h-9 w-9 text-muted-foreground/50" />
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-200/50 dark:from-amber-900/30 dark:to-orange-800/20 flex items-center justify-center rotate-3 shadow-sm border border-amber-200/30 dark:border-amber-800/20">
+            <Search className="h-9 w-9 text-amber-400/60 dark:text-amber-500/40" />
           </div>
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-14 h-14 rounded-xl bg-muted dark:bg-muted/80 flex items-center justify-center -rotate-6 -translate-y-1">
-            <X className="h-6 w-6 text-muted-foreground" />
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-red-100 to-rose-200/50 dark:from-red-900/30 dark:to-rose-800/20 flex items-center justify-center -rotate-6 -translate-y-1 shadow-sm border border-red-200/30 dark:border-red-800/20">
+            <X className="h-6 w-6 text-red-400/60 dark:text-red-500/40" />
           </div>
         </div>
       </div>
@@ -299,7 +305,7 @@ function NoResultsState({ onClear }: { onClear: () => void }) {
       <p className="text-sm text-muted-foreground mb-6 max-w-xs">
         Tidak ditemukan transaksi yang sesuai dengan filter Anda
       </p>
-      <Button onClick={onClear} variant="outline" className="gap-2">
+      <Button onClick={onClear} variant="outline" className="gap-2 press-scale">
         <X className="h-4 w-4" />
         Hapus Filter
       </Button>
@@ -310,6 +316,61 @@ function NoResultsState({ onClear }: { onClear: () => void }) {
 function AnimatedStatValue({ amount, format }: { amount: number; format: (v: number) => string }) {
   const animated = useAnimatedCounter(amount, 800, amount > 0)
   return <span>{format(animated)}</span>
+}
+
+// ── Today's Spending Summary Bar ──────────────────────────────────────────
+function TodaySpendingBar({ transactions }: { transactions: Transaction[] }) {
+  const todayStr = new Date().toISOString().split('T')[0]
+  const todayExpense = transactions
+    .filter((t) => t.type === 'expense' && new Date(t.date).toISOString().split('T')[0] === todayStr)
+    .reduce((s, t) => s + t.amount, 0)
+
+  // Calculate this week's spending (Mon-Sun)
+  const now = new Date()
+  const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1 // Monday = 0
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - dayOfWeek)
+  weekStart.setHours(0, 0, 0, 0)
+
+  const weekExpense = transactions
+    .filter((t) => t.type === 'expense' && new Date(t.date) >= weekStart)
+    .reduce((s, t) => s + t.amount, 0)
+
+  const daysInWeek = dayOfWeek + 1
+  const dailyBudget = daysInWeek > 0 ? weekExpense / daysInWeek : 0
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="flex items-center gap-3 rounded-xl border bg-gradient-to-r from-teal-50 via-white to-emerald-50 dark:from-teal-950/20 dark:via-card dark:to-emerald-950/20 p-3 border-teal-200/30 dark:border-teal-800/20"
+    >
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/40 shrink-0">
+        <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Pengeluaran hari ini</span>
+          <span className="text-xs text-muted-foreground/60">•</span>
+          <span className="text-xs text-muted-foreground">Minggu ini</span>
+        </div>
+        <div className="flex items-baseline gap-3 mt-0.5">
+          <span className="text-sm font-bold text-teal-700 dark:text-teal-300 stat-value">
+            {formatCurrency(todayExpense)}
+          </span>
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            {formatCurrency(weekExpense)}
+          </span>
+          {dailyBudget > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              ~{formatCurrency(Math.round(dailyBudget))}/hari
+            </span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  )
 }
 
 function SummaryStats({ transactions }: { transactions: Transaction[] }) {
@@ -476,6 +537,7 @@ function SwipeableTransactionItem({
   onDuplicate,
   index,
   showSwipeHint,
+  isEvenRow = false,
 }: {
   tx: Transaction
   onEdit: () => void
@@ -483,6 +545,7 @@ function SwipeableTransactionItem({
   onDuplicate: () => void
   index: number
   showSwipeHint: boolean
+  isEvenRow?: boolean
 }) {
   const typeColor = TYPE_COLORS[tx.type as keyof typeof TYPE_COLORS] || 'text-foreground'
   const typeBgCircle = TYPE_BG_CIRCLE[tx.type as keyof typeof TYPE_BG_CIRCLE] || 'bg-muted'
@@ -519,7 +582,7 @@ function SwipeableTransactionItem({
             // The dragConstraints will snap it back
           }
         }}
-        className={`relative flex items-center gap-3 px-4 py-3 border-l-[3px] ${typeBorderLeft} hover:bg-muted/30 transition-colors duration-150 cursor-default bg-card touch-pan-y`}
+        className={`relative flex items-center gap-3 px-4 py-3 border-l-[3px] ${typeBorderLeft} hover:bg-muted/30 transition-colors duration-150 cursor-default ${isEvenRow ? 'bg-muted/[0.03] dark:bg-muted/[0.02]' : 'bg-card'} touch-pan-y`}
       >
         {/* Swipe hint */}
         <AnimatePresence>
@@ -654,6 +717,7 @@ export default function History() {
   const [deleting, setDeleting] = useState(false)
   const [filterOpen, setFilterOpen] = useState(true)
   const [showSwipeHint, setShowSwipeHint] = useState(true)
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   // Edit state
   const [editTarget, setEditTarget] = useState<Transaction | null>(null)
@@ -671,6 +735,15 @@ export default function History() {
     const timer = setTimeout(() => setShowSwipeHint(false), 3000)
     return () => clearTimeout(timer)
   }, [loading])
+
+  // Scroll-to-top detection
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const hasActiveFilters =
     search !== '' || typeFilter !== 'all' || monthFilter !== '' || categoryFilter !== 'all'
@@ -1001,6 +1074,9 @@ export default function History() {
           {/* Summary Stats Banner */}
           <SummaryStats transactions={filteredTransactions} />
 
+          {/* Today's Spending Summary Bar */}
+          <TodaySpendingBar transactions={filteredTransactions} />
+
           <ScrollArea className="max-h-[60vh] [&>div]:scrollbar-thin [&>div]:scrollbar-thumb-muted-foreground/20 [&>div]:scrollbar-track-transparent">
             <div className="space-y-3 pr-1">
               {grouped.map((group, groupIndex) => {
@@ -1055,6 +1131,7 @@ export default function History() {
                         <div className="divide-y divide-border/30">
                           {group.transactions.map((tx, txIndex) => {
                             const globalIndex = groupIndex * 10 + txIndex
+                            const isEvenRow = txIndex % 2 === 0
                             return (
                               <SwipeableTransactionItem
                                 key={tx.id}
@@ -1064,6 +1141,7 @@ export default function History() {
                                 onDuplicate={() => handleDuplicate(tx)}
                                 index={txIndex}
                                 showSwipeHint={showSwipeHint && groupIndex === 0 && txIndex === 0}
+                                isEvenRow={isEvenRow}
                               />
                             )
                           })}
@@ -1077,6 +1155,23 @@ export default function History() {
           </ScrollArea>
         </>
       )}
+
+      {/* Scroll-to-top FAB */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-20 md:bottom-8 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-background border shadow-lg hover:bg-muted transition-colors press-scale"
+            aria-label="Kembali ke atas"
+          >
+            <ArrowUp className="h-4 w-4 text-muted-foreground" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
