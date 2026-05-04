@@ -18,6 +18,7 @@ import {
   Bell,
   Receipt,
   CircleDollarSign,
+  Target,
 } from 'lucide-react'
 import {
   BarChart,
@@ -96,6 +97,16 @@ interface UpcomingBill {
   } | null
 }
 
+interface BudgetProgress {
+  id: string
+  categoryId: string
+  categoryName: string
+  categoryIcon: string
+  budgetAmount: number
+  spent: number
+  percentage: number
+}
+
 interface DashboardData {
   month: string
   totalExpense: number
@@ -105,6 +116,7 @@ interface DashboardData {
   recentTransactions: Transaction[]
   monthlyTrend: MonthlyTrendItem[]
   upcomingBills: UpcomingBill[]
+  budgetProgress: BudgetProgress[]
 }
 
 // ── Chart Colors ───────────────────────────────────────────────────────────
@@ -573,6 +585,65 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Budget Progress ───────────────────────────────────────────── */}
+      {data.budgetProgress && data.budgetProgress.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              Anggaran Bulan Ini
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {data.budgetProgress.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg" role="img" aria-label={item.categoryName}>
+                        {item.categoryIcon}
+                      </span>
+                      <span className="text-sm font-medium">{item.categoryName}</span>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className={
+                        item.percentage > 100
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : item.percentage >= 75
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      }
+                    >
+                      {item.percentage.toFixed(0)}%
+                    </Badge>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        item.percentage > 100
+                          ? 'bg-red-500'
+                          : item.percentage >= 75
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Terpakai: {formatCurrency(item.spent)}</span>
+                    <span>Anggaran: {formatCurrency(item.budgetAmount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Recent Transactions ────────────────────────────────────────── */}
       <Card>

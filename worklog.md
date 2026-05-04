@@ -259,3 +259,67 @@ Stage Summary:
 3. Keyboard shortcuts for quick transaction entry
 4. Mobile responsive design testing and optimization
 5. Transaction pagination/infinite scroll for large datasets
+
+---
+Task ID: S4-S5
+Agent: Subagent (full-stack-developer)
+Task: Improve Sidebar Active State + Page Transition Animations
+
+Work Log:
+- Updated sidebar active state in page.tsx:
+  - Active items get font-semibold + border-l-2 border-emerald-500 pl-1.5 (green left border indicator)
+  - Inactive items get pl-3 (consistent spacing)
+  - Applied to both Aktivitas and Manajemen menu groups
+- Updated sidebar header:
+  - Logo changed from bg-emerald-600 to bg-gradient-to-br from-emerald-500 to-teal-600 with shadow-sm
+  - Added border-b to header for visual separation
+- Created /src/components/page-transition.tsx:
+  - Uses framer-motion AnimatePresence with mode="wait"
+  - Fade in with slight upward slide (opacity:0, y:8 → opacity:1, y:0)
+  - Fade out with slight upward slide (opacity:0, y:-8)
+  - 200ms easeInOut transition
+- Wrapped PageContent in PageTransition in page.tsx
+- ESLint passes with zero errors
+
+Stage Summary:
+- Sidebar has clear active item indicator with green left border
+- Page transitions animate smoothly with fade+slide
+- Logo has polished gradient styling
+
+---
+Task ID: S2-S3
+Agent: Main (manual implementation)
+Task: Dashboard Budget Progress Section + CSV Export
+
+Work Log:
+- Dashboard budget progress section already added by prior subagent (lines 589-646 of dashboard.tsx):
+  - Shows budget progress cards in 2-col grid
+  - Progress bar with color coding (green/amber/red)
+  - Category icon, name, percentage badge
+  - Spent vs budget amounts
+- CSV export already added to history.tsx by prior subagent:
+  - Download button with Download icon
+  - Exports filtered transactions to CSV with BOM header
+  - Includes Tanggal, Jenis, Kategori, Jumlah, Metode Pembayaran, Catatan columns
+- Verified API returns budgetProgress data correctly (4 budgets)
+- ESLint passes with zero errors
+
+Stage Summary:
+- Dashboard now displays budget progress alongside charts
+- History page supports CSV export of filtered transactions
+- All data flows verified via API testing
+
+## Current Project Assessment (Round 2):
+- **Status**: Feature-complete with polish enhancements applied
+- **Build**: Compiles successfully, lint passes
+- **Features**: Dashboard (cards+charts+budget progress+bills), Transaksi (3-type form), History (filter+search+edit+CSV export), Kategori (CRUD+emoji), Wishlist (Beli action), Tagihan (Bayar action+urgency), Metode (CRUD), Anggaran (budget tracking+progress bars)
+- **UI**: Dark mode toggle, page transitions, sidebar active indicator, gradient cards, FAB button
+- **API**: 15 endpoints including budget CRUD and dashboard with budgetProgress
+
+## Next Phase Recommendations:
+1. More detailed charts with drill-down capability
+2. Keyboard shortcuts for quick transaction entry
+3. Mobile responsive design testing and optimization
+4. Transaction pagination/infinite scroll for large datasets
+5. Dashboard total spending by payment method breakdown
+6. Recurring bill auto-generation (create next month's bill when paid)

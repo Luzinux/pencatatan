@@ -47,6 +47,7 @@ import {
   Receipt,
   Plus,
   Loader2,
+  Download,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -288,6 +289,27 @@ export default function History() {
     setCategoryFilter('all')
   }, [])
 
+  const handleExportCSV = useCallback(() => {
+    const headers = ['Tanggal', 'Jenis', 'Kategori', 'Jumlah', 'Metode Pembayaran', 'Catatan']
+    const typeLabels: Record<string, string> = { expense: 'Pengeluaran', income: 'Pemasukan', transfer: 'Transfer' }
+    const rows = filteredTransactions.map(tx => [
+      new Date(tx.date).toISOString().split('T')[0],
+      typeLabels[tx.type] || tx.type,
+      tx.type === 'transfer' ? 'Transfer' : tx.category?.name || '',
+      tx.amount.toString(),
+      tx.paymentMethod?.name || '',
+      (tx.note || '').replace(/,/g, ';')
+    ])
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `transaksi_${monthFilter || 'semua'}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [filteredTransactions, monthFilter])
+
   // Fetch categories for the filter dropdown
   useEffect(() => {
     api
@@ -419,17 +441,30 @@ export default function History() {
           <div className="flex items-center gap-2 mb-1">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Filter</span>
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="ml-auto h-7 text-xs gap-1 px-2"
-              >
-                <X className="h-3 w-3" />
-                Hapus Filter
-              </Button>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {filteredTransactions.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCSV}
+                  className="h-7 text-xs gap-1 px-2"
+                >
+                  <Download className="h-3 w-3" />
+                  Export CSV
+                </Button>
+              )}
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="h-7 text-xs gap-1 px-2"
+                >
+                  <X className="h-3 w-3" />
+                  Hapus Filter
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Search */}

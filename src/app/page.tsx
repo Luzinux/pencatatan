@@ -5,6 +5,7 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter,
 import { Separator } from '@/components/ui/separator'
 import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, PanelLeft, Plus } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { PageTransition } from '@/components/page-transition'
 import dynamic from 'next/dynamic'
 
 // Dynamic imports for page components to reduce initial bundle
@@ -35,9 +36,9 @@ function AppSidebar() {
 
   return (
     <Sidebar collapsible="offcanvas">
-      <SidebarHeader className="px-4 py-4">
+      <SidebarHeader className="border-b px-4 py-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-sm">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-bold text-sm shadow-sm">
             Rp
           </div>
           <div className="flex flex-col">
@@ -61,6 +62,9 @@ function AppSidebar() {
                       setSidebarOpen(false)
                     }}
                     tooltip={item.label}
+                    className={currentPage === item.page
+                      ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
+                      : "pl-3"}
                   >
                     <item.icon className="size-4" />
                     <span>{item.label}</span>
@@ -84,6 +88,9 @@ function AppSidebar() {
                       setSidebarOpen(false)
                     }}
                     tooltip={item.label}
+                    className={currentPage === item.page
+                      ? "font-semibold border-l-2 border-emerald-500 pl-1.5"
+                      : "pl-3"}
                   >
                     <item.icon className="size-4" />
                     <span>{item.label}</span>
@@ -168,13 +175,16 @@ function QuickAddFAB() {
 }
 
 export default function Home() {
+  const { currentPage } = useAppStore()
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <PageHeader />
         <div className="flex-1 overflow-auto p-4 md:p-6">
-          <PageContent />
+          <PageTransition pageKey={currentPage}>
+            <PageContent />
+          </PageTransition>
         </div>
       </SidebarInset>
       <QuickAddFAB />
