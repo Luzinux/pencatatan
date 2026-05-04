@@ -17,6 +17,7 @@ import {
   Plus,
   Search,
   Database,
+  FileText,
 } from 'lucide-react'
 
 interface CommandPaletteProps {
@@ -42,6 +43,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   { id: 'nav-transaksi', label: 'Transaksi', icon: ArrowLeftRight, shortcut: '⌘3', category: 'navigasi', page: 'transaksi' },
   { id: 'nav-history', label: 'History', icon: History, shortcut: '⌘4', category: 'navigasi', page: 'history' },
   { id: 'nav-budget', label: 'Anggaran', icon: Target, shortcut: '⌘5', category: 'navigasi', page: 'budget' },
+  { id: 'nav-reports', label: 'Laporan', icon: FileText, shortcut: '⌘R', category: 'navigasi', page: 'reports' },
   { id: 'nav-kategori', label: 'Kategori', icon: Tags, shortcut: '⌘6', category: 'navigasi', page: 'kategori' },
   { id: 'nav-wishlist', label: 'Wishlist', icon: Heart, shortcut: '⌘7', category: 'navigasi', page: 'wishlist' },
   { id: 'nav-savings', label: 'Tabungan', icon: PiggyBank, shortcut: '⌘8', category: 'navigasi', page: 'savings' },

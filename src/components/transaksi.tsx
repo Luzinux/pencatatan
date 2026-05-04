@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
+import { useAppStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -189,6 +190,7 @@ function SuccessOverlay({ visible }: { visible: boolean }) {
 // ── Main Component ───────────────────────────────────────────────────────
 export default function Transaksi() {
   const { toast } = useToast()
+  const { transactionTemplate, setTransactionTemplate } = useAppStore()
 
   // Tab state
   const [activeType, setActiveType] = useState<TransactionType>('expense')
@@ -264,6 +266,30 @@ export default function Transaksi() {
     }
     loadData()
   }, [fetchCategories, fetchPaymentMethods, fetchRecentTransactions])
+
+  // Apply transaction template from duplicate action
+  useEffect(() => {
+    if (transactionTemplate) {
+      const tType = transactionTemplate.type as TransactionType
+      if (tType === 'expense' || tType === 'income' || tType === 'transfer') {
+        setActiveType(tType)
+      }
+      if (transactionTemplate.amount > 0) {
+        setAmount(String(transactionTemplate.amount))
+      }
+      if (transactionTemplate.categoryId) {
+        setCategoryId(transactionTemplate.categoryId)
+      }
+      if (transactionTemplate.paymentMethodId) {
+        setPaymentMethodId(transactionTemplate.paymentMethodId)
+      }
+      if (transactionTemplate.note) {
+        setNote(transactionTemplate.note)
+      }
+      // Clear the template after applying it
+      setTransactionTemplate(undefined)
+    }
+  }, [transactionTemplate, setTransactionTemplate])
 
   // Fetch budget info when category changes for expense type
   useEffect(() => {

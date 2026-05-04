@@ -48,6 +48,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAnimatedCounter } from '@/hooks/use-animated-counter'
+import { motion } from 'framer-motion'
 
 interface PaymentMethod {
   id: string
@@ -107,6 +108,21 @@ function getProgressTrackColor(percentage: number): string {
   return 'text-rose-500'
 }
 
+function getProgressBadgeStyle(percentage: number): string {
+  if (percentage >= 100) return 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-900'
+  if (percentage >= 75) return 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900'
+  if (percentage >= 50) return 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-400 dark:border-sky-900'
+  return 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-400 dark:border-rose-900'
+}
+
+/** Get days remaining indicator dot color */
+function getDaysRemainingDotClass(days: number | null): string {
+  if (days === null) return 'bg-muted-foreground/30'
+  if (days > 30) return 'bg-emerald-500'
+  if (days >= 7) return 'bg-amber-500'
+  return 'bg-red-500'
+}
+
 // ── Circular Progress Component ────────────────────────────────────────────
 function CircularProgress({
   percentage,
@@ -156,22 +172,45 @@ function getOverallProgressColor(percentage: number): string {
   return 'text-rose-500'
 }
 
-// ── Celebration Particles ──────────────────────────────────────────────────
-function CelebrationParticles() {
-  const colors = ['bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-rose-400', 'bg-purple-400', 'bg-teal-400']
+// ── Confetti Burst Component (12 colorful particles radiating outward) ─────
+function ConfettiBurst({ active }: { active: boolean }) {
+  if (!active) return null
+
+  const colors = [
+    'bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-rose-400',
+    'bg-purple-400', 'bg-teal-400', 'bg-pink-400', 'bg-yellow-400',
+    'bg-indigo-400', 'bg-orange-400', 'bg-cyan-400', 'bg-lime-400',
+  ]
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {colors.map((color, i) => (
-        <div
-          key={i}
-          className={`confetti-particle absolute w-2 h-2 rounded-full ${color}`}
-          style={{
-            left: `${15 + i * 14}%`,
-            top: '30%',
-            animationDelay: `${i * 0.08}s`,
-          }}
-        />
-      ))}
+      {colors.map((color, i) => {
+        const angle = (i / 12) * 360
+        const distance = 50 + Math.random() * 30
+        const rad = (angle * Math.PI) / 180
+        const x = Math.cos(rad) * distance
+        const y = Math.sin(rad) * distance
+        return (
+          <motion.div
+            key={i}
+            className={`absolute w-2 h-2 rounded-full ${color}`}
+            style={{ left: '50%', top: '50%' }}
+            initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+            animate={{
+              x,
+              y,
+              scale: [0, 1.2, 0.6],
+              opacity: [1, 1, 0],
+              rotate: [0, 180 + Math.random() * 180],
+            }}
+            transition={{
+              duration: 0.8 + Math.random() * 0.4,
+              ease: 'easeOut',
+              delay: i * 0.03,
+            }}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -243,6 +282,20 @@ function EmptyState() {
       </p>
     </div>
   )
+}
+
+// ── Animation Variants ─────────────────────────────────────────────────────
+const cardVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.06,
+      duration: 0.35,
+      ease: 'easeOut',
+    },
+  }),
 }
 
 export default function Savings() {
@@ -513,9 +566,9 @@ export default function Savings() {
         </Button>
       </div>
 
-      {/* Enhanced Summary Card */}
+      {/* Enhanced Summary Card with gradient accent */}
       {!loading && savings.length > 0 && (
-        <Card className="border-teal-200 bg-gradient-to-br from-teal-50 via-emerald-50/30 to-white dark:from-teal-950/20 dark:via-emerald-950/10 dark:to-card dark:border-teal-900/50">
+        <Card className="border-teal-200 bg-gradient-to-br from-teal-50 via-emerald-50 to-white dark:from-teal-950/20 dark:via-emerald-950/10 dark:to-card dark:border-teal-900/50">
           <CardContent className="p-4 md:p-5">
             <div className="flex items-center gap-4">
               {/* Circular progress */}
@@ -617,7 +670,7 @@ export default function Savings() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredSavings.map((goal) => {
+              {filteredSavings.map((goal, index) => {
                 const percentage = goal.targetAmount > 0
                   ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100)
                   : 0
@@ -627,145 +680,161 @@ export default function Savings() {
                 const progressPerMonth = getProgressPerMonth(goal)
 
                 return (
-                  <Card
+                  <motion.div
                     key={goal.id}
-                    className={`relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${
-                      isCompleted
-                        ? 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-900/50 dark:bg-emerald-950/10'
-                        : 'border-amber-200 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/10'
-                    }`}
+                    custom={index}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
                   >
-                    {/* Celebration overlay */}
-                    {isJustCompleted && <CelebrationParticles />}
+                    <Card
+                      className={`relative overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
+                        isCompleted
+                          ? 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-900/50 dark:bg-emerald-950/10'
+                          : 'border-amber-200 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/10'
+                      }`}
+                    >
+                      {/* Confetti burst celebration */}
+                      <ConfettiBurst active={isJustCompleted} />
 
-                    <CardContent className="p-4 space-y-3">
-                      {/* Name & Status */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
-                            isCompleted
-                              ? 'bg-emerald-100 dark:bg-emerald-950/50'
-                              : 'bg-amber-100 dark:bg-amber-950/50'
-                          }`}>
-                            <PiggyBank className={`h-4 w-4 ${
+                      <CardContent className="p-4 space-y-3">
+                        {/* Name, Progress Badge & Status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`flex items-center justify-center h-8 w-8 rounded-lg shrink-0 ${
                               isCompleted
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400'
-                            }`} />
+                                ? 'bg-emerald-100 dark:bg-emerald-950/50'
+                                : 'bg-amber-100 dark:bg-amber-950/50'
+                            }`}>
+                              <PiggyBank className={`h-4 w-4 ${
+                                isCompleted
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400'
+                              }`} />
+                            </div>
+                            <h3 className={`font-semibold text-foreground ${isCompleted ? 'line-through opacity-70' : ''}`}>
+                              {goal.name}
+                            </h3>
                           </div>
-                          <h3 className={`font-semibold text-foreground ${isCompleted ? 'line-through opacity-70' : ''}`}>
-                            {goal.name}
-                          </h3>
-                        </div>
-                        {isCompleted && (
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-                        )}
-                        {!isCompleted && (
-                          <Badge
-                            className={`shrink-0 text-xs ${
-                              'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900'
-                            }`}
-                            variant="outline"
-                          >
-                            Aktif
-                          </Badge>
-                        )}
-                      </div>
-
-                      {/* Progress Bar with milestone markers */}
-                      <div className="space-y-0">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={`font-medium ${getProgressTrackColor(percentage)}`}>
-                            {percentage.toFixed(0)}%
-                          </span>
-                          <span className="text-muted-foreground text-xs tabular-nums">
-                            {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
-                          </span>
-                        </div>
-                        <div className="relative">
-                          <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={`h-full rounded-full progress-animate ${getProgressColor(percentage)}`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <MilestoneMarkers />
-                        </div>
-                      </div>
-
-                      {/* Progress per month indicator */}
-                      {!isCompleted && progressPerMonth > 0 && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <TrendingUp className="h-3 w-3" />
-                          <span>Rata-rata {formatCurrency(progressPerMonth)}/bulan</span>
-                        </div>
-                      )}
-
-                      {/* Days remaining & payment method */}
-                      <div className="flex flex-wrap gap-2">
-                        {goal.targetDate && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Calendar className="h-3 w-3" />
-                            {daysRemaining !== null && daysRemaining > 0 ? (
-                              <span>{daysRemaining} hari lagi</span>
-                            ) : daysRemaining !== null && daysRemaining <= 0 ? (
-                              <span className="text-red-500 font-medium">
-                                {daysRemaining === 0 ? 'Hari ini' : `Terlambat ${Math.abs(daysRemaining)} hari`}
-                              </span>
-                            ) : (
-                              <span>{formatDate(goal.targetDate)}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {/* Progress Percentage Badge */}
+                            <Badge
+                              className={`text-xs px-1.5 py-0 h-5 font-semibold ${getProgressBadgeStyle(percentage)}`}
+                              variant="outline"
+                            >
+                              {percentage.toFixed(0)}%
+                            </Badge>
+                            {isCompleted && (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            )}
+                            {!isCompleted && (
+                              <Badge
+                                className="text-xs bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900"
+                                variant="outline"
+                              >
+                                Aktif
+                              </Badge>
                             )}
                           </div>
-                        )}
-                        {goal.paymentMethod && (
-                          <Badge
-                            variant="secondary"
-                            className="text-xs px-1.5 py-0 h-5 font-normal"
-                          >
-                            {goal.paymentMethod.name}
-                          </Badge>
-                        )}
-                      </div>
+                        </div>
 
-                      {/* Note */}
-                      {goal.note && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {goal.note}
-                        </p>
-                      )}
+                        {/* Progress Bar with milestone markers */}
+                        <div className="space-y-0">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className={`font-medium ${getProgressTrackColor(percentage)}`}>
+                              {percentage.toFixed(0)}%
+                            </span>
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
+                            </span>
+                          </div>
+                          <div className="relative">
+                            <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className={`h-full rounded-full progress-animate ${getProgressColor(percentage)}`}
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                            <MilestoneMarkers />
+                          </div>
+                        </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-2 pt-1">
-                        {!isCompleted && (
+                        {/* Progress per month indicator */}
+                        {!isCompleted && progressPerMonth > 0 && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <TrendingUp className="h-3 w-3" />
+                            <span>Rata-rata {formatCurrency(progressPerMonth)}/bulan</span>
+                          </div>
+                        )}
+
+                        {/* Days remaining & payment method */}
+                        <div className="flex flex-wrap gap-2">
+                          {goal.targetDate && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              {/* Days remaining visual indicator dot */}
+                              <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${getDaysRemainingDotClass(daysRemaining)}`} />
+                              <Calendar className="h-3 w-3" />
+                              {daysRemaining !== null && daysRemaining > 0 ? (
+                                <span>{daysRemaining} hari lagi</span>
+                              ) : daysRemaining !== null && daysRemaining <= 0 ? (
+                                <span className="text-red-500 font-medium">
+                                  {daysRemaining === 0 ? 'Hari ini' : `Terlambat ${Math.abs(daysRemaining)} hari`}
+                                </span>
+                              ) : (
+                                <span>{formatDate(goal.targetDate)}</span>
+                              )}
+                            </div>
+                          )}
+                          {goal.paymentMethod && (
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-1.5 py-0 h-5 font-normal"
+                            >
+                              {goal.paymentMethod.name}
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Note */}
+                        {goal.note && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {goal.note}
+                          </p>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-1">
+                          {!isCompleted && (
+                            <Button
+                              onClick={() => handleOpenDeposit(goal)}
+                              size="sm"
+                              className="flex-1 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                              Setor
+                            </Button>
+                          )}
+                          {isCompleted && <div className="flex-1" />}
                           <Button
-                            onClick={() => handleOpenDeposit(goal)}
-                            size="sm"
-                            className="flex-1 gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => handleEdit(goal)}
                           >
-                            <Wallet className="h-3.5 w-3.5" />
-                            Setor
+                            <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        )}
-                        {isCompleted && <div className="flex-1" />}
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0"
-                          onClick={() => handleEdit(goal)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600 hover:border-red-200"
-                          onClick={() => setDeleteTarget(goal)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-red-600 hover:border-red-200"
+                            onClick={() => setDeleteTarget(goal)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 )
               })}
             </div>

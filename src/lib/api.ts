@@ -99,6 +99,10 @@ export const api = {
   depositSavings: (id: string, data: any) =>
     fetchJSON<any>(`/savings/${id}/deposit`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // Reports
+  getReports: (month: string) =>
+    fetchJSON<any>(`/reports?month=${month}`),
+
   // Spending Heatmap
   getSpendingHeatmap: (month?: string) =>
     fetchJSON<{ month: string; days: { date: string; amount: number; count: number }[] }>(`/spending-heatmap${month ? `?month=${month}` : ''}`),

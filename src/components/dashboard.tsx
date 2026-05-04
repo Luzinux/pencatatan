@@ -1420,8 +1420,8 @@ export default function Dashboard() {
                 Wawasan Cerdas
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
+            <CardContent className="pt-0">
+              <div className="space-y-3">
                 {insights.map((insight, index) => (
                   <InsightCard
                     key={index}

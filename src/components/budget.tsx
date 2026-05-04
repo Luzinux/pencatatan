@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { formatCurrency, getMonthYear, getMonthLabel } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,9 +42,13 @@ import {
   Wallet,
   Calendar,
   Clock,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAnimatedCounter } from '@/hooks/use-animated-counter'
+import { motion } from 'framer-motion'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Category {
@@ -64,6 +68,10 @@ interface BudgetItem {
   percentage: number
 }
 
+interface PreviousMonthSpending {
+  [categoryId: string]: number
+}
+
 interface BudgetFormData {
   categoryId: string
   amount: string
@@ -80,6 +88,12 @@ function getProgressBgColor(percentage: number): string {
   if (percentage > 100) return 'bg-red-100 dark:bg-red-900/30'
   if (percentage >= 75) return 'bg-amber-100 dark:bg-amber-900/30'
   return 'bg-emerald-100 dark:bg-emerald-900/30'
+}
+
+function getProgressGradientBg(percentage: number): string {
+  if (percentage > 100) return 'bg-gradient-to-br from-red-100 to-red-50 dark:from-red-900/30 dark:to-red-950/10'
+  if (percentage >= 75) return 'bg-gradient-to-br from-amber-100 to-amber-50 dark:from-amber-900/30 dark:to-amber-950/10'
+  return 'bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-950/10'
 }
 
 function getBadgeStyle(percentage: number): string {
@@ -136,6 +150,20 @@ function getOverallProgressColor(percentage: number): string {
   return 'text-emerald-500'
 }
 
+// ── Animation Variants ─────────────────────────────────────────────────────
+const cardVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.06,
+      duration: 0.35,
+      ease: 'easeOut',
+    },
+  }),
+}
+
 // ── Loading Skeleton ───────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
@@ -154,7 +182,7 @@ function BudgetSkeleton() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-12 w-12 rounded-full" />
                   <Skeleton className="h-5 w-24" />
                 </div>
                 <Skeleton className="h-7 w-7 rounded-md" />
@@ -177,10 +205,12 @@ function BudgetCard({
   budget,
   onDelete,
   remainingDays,
+  previousMonthSpent,
 }: {
   budget: BudgetItem
   onDelete: (budget: BudgetItem) => void
   remainingDays: number
+  previousMonthSpent?: number
 }) {
   const clampedPercentage = Math.min(budget.percentage, 100)
   const isOverBudget = budget.percentage > 100
@@ -189,76 +219,130 @@ function BudgetCard({
     ? Math.round(remaining / remainingDays)
     : 0
 
+  // Previous month comparison
+  const prevSpent = previousMonthSpent ?? 0
+  const diff = prevSpent > 0 ? budget.spent - prevSpent : 0
+  const diffPct = prevSpent > 0 ? Math.round((diff / prevSpent) * 100) : 0
+
   return (
-    <Card className="relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5">
-      <CardContent className="p-4">
-        {/* Header: Category info + Delete button */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${getProgressBgColor(budget.percentage)}`}>
-              <span className="text-lg" role="img" aria-label={budget.categoryName}>
-                {budget.categoryIcon || '📝'}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{budget.categoryName}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                Anggaran: {formatCurrency(budget.budgetAmount)}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge className={getBadgeStyle(budget.percentage)}>
-              {budget.percentage}%
-            </Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              onClick={() => onDelete(budget)}
-              aria-label={`Hapus anggaran ${budget.categoryName}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Progress Bar with animation */}
-        <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
-          <div
-            className={`h-full rounded-full progress-animate ${getProgressColor(budget.percentage)}`}
-            style={{ width: `${clampedPercentage}%` }}
-          />
-          {isOverBudget && (
-            <div
-              className="absolute top-0 h-full rounded-full bg-red-300/50 animate-pulse"
-              style={{ width: '100%' }}
-            />
-          )}
-        </div>
-
-        {/* Footer: Spent / Remaining / Daily rate */}
-        <div className="mt-2 flex items-center justify-between text-xs">
-          <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
-            Terpakai: {formatCurrency(budget.spent)}
-          </span>
-          <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
-            {isOverBudget
-              ? `Lebih ${formatCurrency(budget.spent - budget.budgetAmount)}`
-              : `Sisa: ${formatCurrency(remaining)}`
-            }
-          </span>
-        </div>
-
-        {/* Daily remaining budget indicator */}
-        {!isOverBudget && remaining > 0 && remainingDays > 0 && (
-          <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>{formatCurrency(dailyRemaining)}/hari tersisa</span>
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+    >
+      <Card className={`relative overflow-hidden transition-shadow duration-200 hover:shadow-lg ${
+        isOverBudget
+          ? 'border-red-300 dark:border-red-800/60'
+          : ''
+      }`}>
+        {/* Overspent warning glow */}
+        {isOverBudget && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 rounded-xl ring-2 ring-red-400/30 dark:ring-red-600/30 animate-pulse" />
           </div>
         )}
-      </CardContent>
-    </Card>
+
+        <CardContent className="p-4">
+          {/* Header: Category info + Delete button */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              {/* Larger category icon circle with gradient background */}
+              <div className={`flex h-12 w-12 items-center justify-center rounded-full ${getProgressGradientBg(budget.percentage)}`}>
+                <span className="text-xl" role="img" aria-label={budget.categoryName}>
+                  {budget.categoryIcon || '📝'}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{budget.categoryName}</p>
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  Anggaran: {formatCurrency(budget.budgetAmount)}
+                </p>
+                {/* vs bulan lalu comparison */}
+                {prevSpent > 0 && (
+                  <div className={`flex items-center gap-1 text-xs mt-0.5 ${
+                    diff > 0
+                      ? 'text-red-500 dark:text-red-400'
+                      : diff < 0
+                        ? 'text-emerald-500 dark:text-emerald-400'
+                        : 'text-muted-foreground'
+                  }`}>
+                    {diff > 0 ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : diff < 0 ? (
+                      <TrendingDown className="h-3 w-3" />
+                    ) : null}
+                    <span>
+                      {diff > 0
+                        ? `+${diffPct}% vs bulan lalu`
+                        : diff < 0
+                          ? `${diffPct}% vs bulan lalu`
+                          : 'Sama dengan bulan lalu'
+                      }
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={getBadgeStyle(budget.percentage)}>
+                {budget.percentage}%
+              </Badge>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={() => onDelete(budget)}
+                aria-label={`Hapus anggaran ${budget.categoryName}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Overspent warning badge */}
+          {isOverBudget && (
+            <div className="flex items-center gap-1.5 mb-2 text-xs font-medium text-red-600 dark:text-red-400">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>Melebihi anggaran!</span>
+            </div>
+          )}
+
+          {/* Progress Bar with animation */}
+          <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full rounded-full progress-animate ${getProgressColor(budget.percentage)}`}
+              style={{ width: `${clampedPercentage}%` }}
+            />
+            {isOverBudget && (
+              <div
+                className="absolute top-0 h-full rounded-full bg-red-300/50 animate-pulse"
+                style={{ width: '100%' }}
+              />
+            )}
+          </div>
+
+          {/* Footer: Spent / Remaining / Daily rate */}
+          <div className="mt-2 flex items-center justify-between text-xs">
+            <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
+              Terpakai: {formatCurrency(budget.spent)}
+            </span>
+            <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
+              {isOverBudget
+                ? `Lebih ${formatCurrency(budget.spent - budget.budgetAmount)}`
+                : `Sisa: ${formatCurrency(remaining)}`
+              }
+            </span>
+          </div>
+
+          {/* Daily remaining budget indicator */}
+          {!isOverBudget && remaining > 0 && remainingDays > 0 && (
+            <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>{formatCurrency(dailyRemaining)}/hari tersisa</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 
@@ -273,6 +357,9 @@ export default function Budget() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Previous month spending per category
+  const [prevMonthSpending, setPrevMonthSpending] = useState<PreviousMonthSpending>({})
+
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [formData, setFormData] = useState<BudgetFormData>({
@@ -285,6 +372,13 @@ export default function Budget() {
   const [deleteTarget, setDeleteTarget] = useState<BudgetItem | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // ── Helper: Get previous month string ──────────────────────────────────
+  const getPreviousMonth = (monthStr: string): string => {
+    const [year, month] = monthStr.split('-').map(Number)
+    const date = new Date(year, month - 2, 1)
+    return getMonthYear(date)
+  }
+
   // ── Fetch Data ──────────────────────────────────────────────────────────
   const fetchData = useCallback(async (month: string) => {
     setLoading(true)
@@ -296,6 +390,26 @@ export default function Budget() {
       ])
       setBudgets(budgetData)
       setCategories(catData)
+
+      // Fetch previous month spending per category
+      const prevMonth = getPreviousMonth(month)
+      const [prevYear, prevMon] = prevMonth.split('-').map(Number)
+      const prevMonthStart = new Date(prevYear, prevMon - 1, 1)
+      const prevMonthEnd = new Date(prevYear, prevMon, 1)
+
+      // Use analytics API to get category breakdown for previous month
+      try {
+        const analyticsData = await api.getAnalytics(prevMonth)
+        const spendingMap: PreviousMonthSpending = {}
+        if (analyticsData.categoryBreakdown) {
+          for (const cat of analyticsData.categoryBreakdown) {
+            spendingMap[cat.categoryId] = cat.totalAmount
+          }
+        }
+        setPrevMonthSpending(spendingMap)
+      } catch {
+        setPrevMonthSpending({})
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Gagal memuat data anggaran'
       setError(message)
@@ -579,13 +693,21 @@ export default function Budget() {
           {/* ── Budget Cards Grid ──────────────────────────────────────────── */}
           {budgets.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {budgets.map((budget) => (
-                <BudgetCard
+              {budgets.map((budget, index) => (
+                <motion.div
                   key={budget.id}
-                  budget={budget}
-                  onDelete={openDeleteConfirm}
-                  remainingDays={remainingDays}
-                />
+                  custom={index}
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <BudgetCard
+                    budget={budget}
+                    onDelete={openDeleteConfirm}
+                    remainingDays={remainingDays}
+                    previousMonthSpent={prevMonthSpending[budget.categoryId]}
+                  />
+                </motion.div>
               ))}
             </div>
           ) : (

@@ -5,7 +5,7 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter,
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal, Database } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal, Database, FileText } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { PageTransition } from '@/components/page-transition'
 import { NotificationCenter } from '@/components/notification-center'
@@ -28,6 +28,7 @@ const Budget = dynamic(() => import('@/components/budget'), { ssr: false })
 const Analytics = dynamic(() => import('@/components/analytics'), { ssr: false })
 const Savings = dynamic(() => import('@/components/savings'), { ssr: false })
 const BackupRestore = dynamic(() => import('@/components/backup-restore'), { ssr: false })
+const Reports = dynamic(() => import('@/components/reports'), { ssr: false })
 
 const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'aktivitas' | 'manajemen'; shortcut: string }[] = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'aktivitas', shortcut: '⌘1' },
@@ -35,6 +36,7 @@ const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'a
   { page: 'transaksi', label: 'Transaksi', icon: ArrowLeftRight, group: 'aktivitas', shortcut: '⌘3' },
   { page: 'history', label: 'History', icon: History, group: 'aktivitas', shortcut: '⌘4' },
   { page: 'budget', label: 'Anggaran', icon: Target, group: 'aktivitas', shortcut: '⌘5' },
+  { page: 'reports', label: 'Laporan', icon: FileText, group: 'aktivitas', shortcut: '⌘R' },
   { page: 'kategori', label: 'Kategori', icon: Tags, group: 'manajemen', shortcut: '⌘6' },
   { page: 'wishlist', label: 'Wishlist', icon: Heart, group: 'manajemen', shortcut: '⌘7' },
   { page: 'savings', label: 'Tabungan', icon: PiggyBank, group: 'manajemen', shortcut: '⌘8' },
@@ -258,6 +260,8 @@ function PageContent() {
       return <HistoryPage />
     case 'budget':
       return <Budget />
+    case 'reports':
+      return <Reports />
     case 'kategori':
       return <Kategori />
     case 'wishlist':
@@ -284,6 +288,7 @@ function PageHeader() {
     transaksi: 'Transaksi Baru',
     history: 'Riwayat Transaksi',
     budget: 'Anggaran',
+    reports: 'Laporan Keuangan',
     kategori: 'Kategori',
     wishlist: 'Wishlist',
     savings: 'Tabungan',
@@ -353,6 +358,7 @@ const bottomNavItems: { page: Page; label: string; icon: React.ElementType }[] =
 
 const moreMenuItems: { page: Page; label: string; icon: React.ElementType }[] = [
   { page: 'analytics', label: 'Analisis', icon: BarChart3 },
+  { page: 'reports', label: 'Laporan', icon: FileText },
   { page: 'kategori', label: 'Kategori', icon: Tags },
   { page: 'wishlist', label: 'Wishlist', icon: Heart },
   { page: 'savings', label: 'Tabungan', icon: PiggyBank },

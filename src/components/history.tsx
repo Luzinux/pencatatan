@@ -62,6 +62,7 @@ import {
   ArrowRight,
   RotateCcw,
   ChevronLeft,
+  Copy,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/hooks/use-toast'
@@ -472,12 +473,14 @@ function SwipeableTransactionItem({
   tx,
   onEdit,
   onDelete,
+  onDuplicate,
   index,
   showSwipeHint,
 }: {
   tx: Transaction
   onEdit: () => void
   onDelete: () => void
+  onDuplicate: () => void
   index: number
   showSwipeHint: boolean
 }) {
@@ -617,6 +620,15 @@ function SwipeableTransactionItem({
           <Button
             variant="ghost"
             size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400 shrink-0"
+            onClick={onDuplicate}
+            title="Duplikat Transaksi"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0 md:hidden"
             onClick={onDelete}
           >
@@ -630,7 +642,7 @@ function SwipeableTransactionItem({
 
 export default function History() {
   const { toast } = useToast()
-  const setCurrentPage = useAppStore((s) => s.setCurrentPage)
+  const { setCurrentPage, setTransactionTemplate } = useAppStore()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -812,6 +824,21 @@ export default function History() {
     } finally {
       setDeleting(false)
     }
+  }
+
+  const handleDuplicate = (tx: Transaction) => {
+    setTransactionTemplate({
+      type: tx.type,
+      amount: tx.amount,
+      categoryId: tx.categoryId || undefined,
+      paymentMethodId: tx.paymentMethodId || undefined,
+      note: tx.note || undefined,
+    })
+    setCurrentPage('transaksi')
+    toast({
+      title: 'Template Diterapkan',
+      description: 'Form transaksi telah diisi dengan data duplikat',
+    })
   }
 
   return (
@@ -1034,6 +1061,7 @@ export default function History() {
                                 tx={tx}
                                 onEdit={() => handleOpenEdit(tx)}
                                 onDelete={() => setDeleteTarget(tx)}
+                                onDuplicate={() => handleDuplicate(tx)}
                                 index={txIndex}
                                 showSwipeHint={showSwipeHint && groupIndex === 0 && txIndex === 0}
                               />
