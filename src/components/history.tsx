@@ -25,10 +25,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Search,
   Trash2,
+  Pencil,
   ArrowDownLeft,
   ArrowUpRight,
   ArrowLeftRight,
@@ -36,6 +46,7 @@ import {
   X,
   Receipt,
   Plus,
+  Loader2,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -256,6 +267,17 @@ export default function History() {
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Edit state
+  const [editTarget, setEditTarget] = useState<Transaction | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editCategoryId, setEditCategoryId] = useState('')
+  const [editPaymentMethodId, setEditPaymentMethodId] = useState('')
+  const [editToPaymentMethodId, setEditToPaymentMethodId] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editNote, setEditNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+
   const hasActiveFilters =
     search !== '' || typeFilter !== 'all' || monthFilter !== '' || categoryFilter !== 'all'
 
@@ -271,6 +293,14 @@ export default function History() {
     api
       .getCategories()
       .then((data) => setCategories(data))
+      .catch(() => {})
+  }, [])
+
+  // Fetch payment methods for edit dialog
+  useEffect(() => {
+    api
+      .getPaymentMethods()
+      .then((data) => setPaymentMethods(data))
       .catch(() => {})
   }, [])
 
@@ -311,6 +341,53 @@ export default function History() {
   }, [transactions, categoryFilter])
 
   const grouped = useMemo(() => groupByDate(filteredTransactions), [filteredTransactions])
+
+  const handleOpenEdit = (tx: Transaction) => {
+    setEditTarget(tx)
+    setEditAmount(String(tx.amount))
+    setEditCategoryId(tx.categoryId || '')
+    setEditPaymentMethodId(tx.paymentMethodId || '')
+    setEditToPaymentMethodId(tx.toPaymentMethodId || '')
+    // Format date as YYYY-MM-DD for the date input
+    const d = new Date(tx.date)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    setEditDate(`${year}-${month}-${day}`)
+    setEditNote(tx.note || '')
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editTarget) return
+    if (!editAmount || parseFloat(editAmount) <= 0) {
+      toast({ title: 'Validasi Gagal', description: 'Nominal harus diisi dan lebih dari 0', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        amount: parseFloat(editAmount),
+        date: editDate,
+        note: editNote || undefined,
+      }
+      if (editTarget.type === 'expense' || editTarget.type === 'income') {
+        payload.categoryId = editCategoryId || null
+        payload.paymentMethodId = editPaymentMethodId || null
+      }
+      if (editTarget.type === 'transfer') {
+        payload.paymentMethodId = editPaymentMethodId || null
+        payload.toPaymentMethodId = editToPaymentMethodId || null
+      }
+      await api.updateTransaction(editTarget.id, payload)
+      toast({ title: 'Berhasil!', description: 'Transaksi berhasil diperbarui' })
+      setEditTarget(null)
+      await fetchTransactions()
+    } catch {
+      toast({ title: 'Gagal', description: 'Terjadi kesalahan saat memperbarui transaksi', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -544,6 +621,14 @@ export default function History() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                              onClick={() => handleOpenEdit(tx)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0"
                               onClick={() => setDeleteTarget(tx)}
                             >
@@ -595,6 +680,189 @@ export default function History() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Transaction Dialog */}
+      <Dialog
+        open={!!editTarget}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+      >
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Edit{' '}
+              {editTarget?.type === 'expense'
+                ? 'Pengeluaran'
+                : editTarget?.type === 'income'
+                  ? 'Pemasukan'
+                  : 'Transfer'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Nominal */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-amount" className="text-sm font-medium">
+                Nominal <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="edit-amount"
+                type="number"
+                inputMode="numeric"
+                placeholder="0"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                min={0}
+              />
+            </div>
+
+            {/* Category — for expense & income only */}
+            {(editTarget?.type === 'expense' || editTarget?.type === 'income') && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Kategori{' '}
+                  {editTarget?.type === 'expense' && (
+                    <span className="text-red-500">*</span>
+                  )}
+                </Label>
+                <Select value={editCategoryId} onValueChange={setEditCategoryId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih kategori" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories
+                      .filter(
+                        (cat) =>
+                          cat.type === editTarget?.type
+                      )
+                      .map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Transfer: From / To */}
+            {editTarget?.type === 'transfer' && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Dari</Label>
+                  <Select
+                    value={editPaymentMethodId}
+                    onValueChange={setEditPaymentMethodId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Pilih sumber" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethods.map((pm) => (
+                        <SelectItem key={pm.id} value={pm.id}>
+                          {pm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Ke</Label>
+                  <Select
+                    value={editToPaymentMethodId}
+                    onValueChange={setEditToPaymentMethodId}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Pilih tujuan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {paymentMethods.map((pm) => (
+                        <SelectItem key={pm.id} value={pm.id}>
+                          {pm.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Method — for expense & income */}
+            {(editTarget?.type === 'expense' || editTarget?.type === 'income') && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Metode Pembayaran
+                </Label>
+                <Select
+                  value={editPaymentMethodId}
+                  onValueChange={setEditPaymentMethodId}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Pilih metode pembayaran" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((pm) => (
+                      <SelectItem key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Date */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-date" className="text-sm font-medium">
+                Tanggal
+              </Label>
+              <Input
+                id="edit-date"
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="w-full"
+              />
+            </div>
+
+            {/* Note */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-note" className="text-sm font-medium">
+                Catatan
+              </Label>
+              <Textarea
+                id="edit-note"
+                placeholder="Tambahkan catatan (opsional)"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                rows={2}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setEditTarget(null)}
+              disabled={saving}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Menyimpan...
+                </>
+              ) : (
+                'Simpan'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

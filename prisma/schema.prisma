@@ -18,6 +18,7 @@ model Category {
   transactions Transaction[]
   wishlists    Wishlist[]
   bills        Bill[]
+  budgets      Budget[]
 }
 
 model PaymentMethod {
@@ -89,4 +90,15 @@ model Bill {
   category       Category?      @relation(fields: [categoryId], references: [id])
   paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   transactions   Transaction[]
+}
+
+model Budget {
+  id         String   @id @default(cuid())
+  amount     Float
+  month      String   // YYYY-MM format
+  categoryId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id])
 }

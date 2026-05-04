@@ -74,4 +74,12 @@ export const api = {
     fetchJSON<any>(`/bills/${id}`, { method: 'DELETE' }),
   payBill: (id: string) =>
     fetchJSON<any>(`/bills/${id}/pay`, { method: 'POST' }),
+
+  // Budgets
+  getBudgets: (month?: string) =>
+    fetchJSON<any[]>(`/budgets${month ? `?month=${month}` : ''}`),
+  createBudget: (data: any) =>
+    fetchJSON<any>('/budgets', { method: 'POST', body: JSON.stringify(data) }),
+  deleteBudget: (id: string) =>
+    fetchJSON<any>(`/budgets/${id}`, { method: 'DELETE' }),
 }

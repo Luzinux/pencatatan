@@ -126,6 +126,38 @@ export async function GET(request: NextRequest) {
       orderBy: { dueDate: 'asc' },
     })
 
+    // Budget data for the month
+    const budgets = await db.budget.findMany({
+      where: { month: currentMonth },
+      include: { category: true },
+    })
+
+    // Calculate spent per category for the month
+    const categorySpending = await db.transaction.groupBy({
+      by: ['categoryId'],
+      where: {
+        type: 'expense',
+        date: { gte: monthStart, lt: monthEnd },
+        categoryId: { not: null },
+      },
+      _sum: { amount: true },
+    })
+
+    const budgetProgress = budgets.map((budget) => {
+      const spent = categorySpending.find(
+        (cs) => cs.categoryId === budget.categoryId
+      )?._sum.amount || 0
+      return {
+        id: budget.id,
+        categoryId: budget.categoryId,
+        categoryName: budget.category.name,
+        categoryIcon: budget.category.icon,
+        budgetAmount: budget.amount,
+        spent,
+        percentage: budget.amount > 0 ? Math.round((spent / budget.amount) * 100) : 0,
+      }
+    })
+
     return NextResponse.json({
       month: currentMonth,
       totalExpense,
@@ -135,6 +167,7 @@ export async function GET(request: NextRequest) {
       recentTransactions,
       monthlyTrend,
       upcomingBills,
+      budgetProgress,
     })
   } catch (error) {
     console.error('Error fetching dashboard:', error)

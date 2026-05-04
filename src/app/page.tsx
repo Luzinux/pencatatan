@@ -3,7 +3,8 @@
 import { useAppStore, type Page } from '@/lib/store'
 import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarInset, SidebarTrigger, SidebarSeparator, SidebarGroup as SidebarGroupComponent } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
-import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, PanelLeft } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, PanelLeft, Plus } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 import dynamic from 'next/dynamic'
 
 // Dynamic imports for page components to reduce initial bundle
@@ -14,11 +15,13 @@ const Kategori = dynamic(() => import('@/components/kategori'), { ssr: false })
 const Wishlist = dynamic(() => import('@/components/wishlist'), { ssr: false })
 const Tagihan = dynamic(() => import('@/components/tagihan'), { ssr: false })
 const Metode = dynamic(() => import('@/components/metode'), { ssr: false })
+const Budget = dynamic(() => import('@/components/budget'), { ssr: false })
 
 const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'aktivitas' | 'manajemen' }[] = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'aktivitas' },
   { page: 'transaksi', label: 'Transaksi', icon: ArrowLeftRight, group: 'aktivitas' },
   { page: 'history', label: 'History', icon: History, group: 'aktivitas' },
+  { page: 'budget', label: 'Anggaran', icon: Target, group: 'aktivitas' },
   { page: 'kategori', label: 'Kategori', icon: Tags, group: 'manajemen' },
   { page: 'wishlist', label: 'Wishlist', icon: Heart, group: 'manajemen' },
   { page: 'tagihan', label: 'Tagihan', icon: Receipt, group: 'manajemen' },
@@ -92,8 +95,9 @@ function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 py-3">
-        <div className="text-xs text-muted-foreground text-center">
-          DompetKu v1.0
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">DompetKu v1.0</span>
+          <ThemeToggle />
         </div>
       </SidebarFooter>
     </Sidebar>
@@ -110,6 +114,8 @@ function PageContent() {
       return <Transaksi />
     case 'history':
       return <HistoryPage />
+    case 'budget':
+      return <Budget />
     case 'kategori':
       return <Kategori />
     case 'wishlist':
@@ -129,6 +135,7 @@ function PageHeader() {
     dashboard: 'Dashboard',
     transaksi: 'Transaksi Baru',
     history: 'Riwayat Transaksi',
+    budget: 'Anggaran',
     kategori: 'Kategori',
     wishlist: 'Wishlist',
     tagihan: 'Tagihan',
@@ -146,16 +153,31 @@ function PageHeader() {
   )
 }
 
+function QuickAddFAB() {
+  const { currentPage, setCurrentPage } = useAppStore()
+  if (currentPage === 'transaksi') return null
+  return (
+    <button
+      onClick={() => setCurrentPage('transaksi')}
+      className="fixed bottom-6 right-6 z-50 flex md:hidden h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95 transition-all"
+      aria-label="Tambah Transaksi"
+    >
+      <Plus className="h-6 w-6" />
+    </button>
+  )
+}
+
 export default function Home() {
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <PageHeader />
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto p-4 md:p-6">
           <PageContent />
         </div>
       </SidebarInset>
+      <QuickAddFAB />
     </SidebarProvider>
   )
 }

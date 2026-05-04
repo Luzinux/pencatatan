@@ -355,7 +355,7 @@ export default function Dashboard() {
       {/* ── Summary Cards ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Pengeluaran */}
-        <Card className="relative overflow-hidden border-red-200 dark:border-red-900/40">
+        <Card className="relative overflow-hidden border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm dark:border-red-900/40 dark:from-red-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
             <ArrowDownLeft className="h-5 w-5 text-red-500" />
           </div>
@@ -365,14 +365,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-red-600 sm:text-3xl dark:text-red-400">
+            <p className="text-3xl font-bold text-red-600 sm:text-4xl dark:text-red-400">
               {formatCurrency(data.totalExpense)}
             </p>
           </CardContent>
         </Card>
 
         {/* Total Pemasukan */}
-        <Card className="relative overflow-hidden border-green-200 dark:border-green-900/40">
+        <Card className="relative overflow-hidden border-green-200 bg-gradient-to-br from-green-50 to-white shadow-sm dark:border-green-900/40 dark:from-green-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
             <ArrowUpRight className="h-5 w-5 text-green-500" />
           </div>
@@ -382,14 +382,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-green-600 sm:text-3xl dark:text-green-400">
+            <p className="text-3xl font-bold text-green-600 sm:text-4xl dark:text-green-400">
               {formatCurrency(data.totalIncome)}
             </p>
           </CardContent>
         </Card>
 
         {/* Sisa Uang */}
-        <Card className="relative overflow-hidden border-teal-200 dark:border-teal-900/40">
+        <Card className="relative overflow-hidden border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm dark:border-teal-900/40 dark:from-teal-950/20 dark:to-card">
           <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
             <Wallet className="h-5 w-5 text-teal-500" />
           </div>
@@ -400,7 +400,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p
-              className={`text-2xl font-bold sm:text-3xl ${
+              className={`text-3xl font-bold sm:text-4xl ${
                 data.balance >= 0
                   ? 'text-teal-600 dark:text-teal-400'
                   : 'text-red-600 dark:text-red-400'

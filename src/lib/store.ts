@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type Page = 'dashboard' | 'transaksi' | 'history' | 'kategori' | 'wishlist' | 'tagihan' | 'metode'
+export type Page = 'dashboard' | 'transaksi' | 'history' | 'budget' | 'kategori' | 'wishlist' | 'tagihan' | 'metode'
 
 interface AppState {
   currentPage: Page
