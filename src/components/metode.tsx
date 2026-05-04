@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, getMonthYear } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,8 +43,13 @@ import {
   Loader2,
   Wallet,
   TrendingDown,
+  TrendingUp,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
+import { motion } from 'framer-motion'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type PaymentMethodType = 'cash' | 'ewallet' | 'bank'
@@ -70,6 +75,7 @@ const TYPE_CONFIG: Record<
     cardBorderClass: string
     cardBgClass: string
     patternColor: string
+    shadowColor: string
   }
 > = {
   cash: {
@@ -82,6 +88,7 @@ const TYPE_CONFIG: Record<
     cardBorderClass: 'border-green-200 dark:border-green-900/40',
     cardBgClass: 'bg-gradient-to-br from-green-50/80 via-emerald-50/30 to-card dark:from-green-950/20 dark:via-emerald-950/5 dark:to-card',
     patternColor: 'bg-green-200/20 dark:bg-green-800/10',
+    shadowColor: 'hover:shadow-green-200/30 dark:hover:shadow-green-900/20',
   },
   ewallet: {
     label: 'E-Wallet',
@@ -93,6 +100,7 @@ const TYPE_CONFIG: Record<
     cardBorderClass: 'border-purple-200 dark:border-purple-900/40',
     cardBgClass: 'bg-gradient-to-br from-purple-50/80 via-violet-50/30 to-card dark:from-purple-950/20 dark:via-violet-950/5 dark:to-card',
     patternColor: 'bg-purple-200/20 dark:bg-purple-800/10',
+    shadowColor: 'hover:shadow-purple-200/30 dark:hover:shadow-purple-900/20',
   },
   bank: {
     label: 'Bank',
@@ -104,6 +112,71 @@ const TYPE_CONFIG: Record<
     cardBorderClass: 'border-sky-200 dark:border-sky-900/40',
     cardBgClass: 'bg-gradient-to-br from-sky-50/80 via-blue-50/30 to-card dark:from-sky-950/20 dark:via-blue-950/5 dark:to-card',
     patternColor: 'bg-sky-200/20 dark:bg-sky-800/10',
+    shadowColor: 'hover:shadow-sky-200/30 dark:hover:shadow-sky-900/20',
+  },
+}
+
+// ── Sparkline Component ────────────────────────────────────────────────────
+
+function MiniSparkline({
+  data,
+  color,
+  width = 64,
+  height = 24,
+}: {
+  data: number[]
+  color: string
+  width?: number
+  height?: number
+}) {
+  if (data.length < 2) return null
+
+  const max = Math.max(...data, 1)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const padding = 2
+
+  const points = data.map((value, index) => {
+    const x = padding + (index / (data.length - 1)) * (width - padding * 2)
+    const y = padding + (1 - (value - min) / range) * (height - padding * 2)
+    return `${x},${y}`
+  })
+
+  const linePath = `M${points.join(' L')}`
+
+  // Area fill path
+  const areaPath = `${linePath} L${padding + ((data.length - 1) / (data.length - 1)) * (width - padding * 2)},${height - padding} L${padding},${height - padding} Z`
+
+  return (
+    <svg width={width} height={height} className="opacity-70">
+      <path d={areaPath} fill={color} fillOpacity={0.15} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ── Animation Variants ─────────────────────────────────────────────────────
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.07,
+    },
+  },
+}
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.35,
+      ease: 'easeOut',
+    },
   },
 }
 
@@ -117,7 +190,7 @@ function MetodeSkeleton() {
         <Skeleton className="h-10 w-36" />
       </div>
       {/* Summary skeleton */}
-      <Skeleton className="h-20 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-xl" />
       {/* Cards skeleton */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
@@ -177,6 +250,12 @@ export default function Metode() {
   // Spending data per payment method (from dashboard)
   const [methodSpending, setMethodSpending] = useState<Record<string, number>>({})
 
+  // Previous month spending data for comparison
+  const [prevMonthSpending, setPrevMonthSpending] = useState<Record<string, number>>({})
+
+  // Sparkline data per payment method (last 7 days)
+  const [sparklineData, setSparklineData] = useState<Record<string, number[]>>({})
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -189,7 +268,26 @@ export default function Metode() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Fetch data
+  // ── Computed values ──────────────────────────────────────────────────
+
+  const totalBalance = useMemo(
+    () => methods.reduce((sum, m) => sum + (m.initialBalance ?? 0), 0),
+    [methods]
+  )
+
+  const animatedTotalBalance = useAnimatedCounter(
+    Math.round(totalBalance),
+    800,
+    !loading && methods.length > 0
+  )
+
+  // Summary counts by type
+  const cashCount = methods.filter((m) => m.type === 'cash').length
+  const ewalletCount = methods.filter((m) => m.type === 'ewallet').length
+  const bankCount = methods.filter((m) => m.type === 'bank').length
+
+  // ── Data Fetching ──────────────────────────────────────────────────
+
   const fetchMethods = useCallback(async () => {
     try {
       const data = await api.getPaymentMethods()
@@ -210,27 +308,78 @@ export default function Metode() {
     fetchMethods()
   }, [fetchMethods])
 
-  // Fetch spending data from dashboard
+  // Fetch spending data from dashboard (current + previous month)
   useEffect(() => {
     if (methods.length > 0) {
-      api.getDashboard().then((dash) => {
-        const spending: Record<string, number> = {}
-        if (dash.paymentMethodBreakdown && Array.isArray(dash.paymentMethodBreakdown)) {
-          dash.paymentMethodBreakdown.forEach((pm: { paymentMethodId: string; totalAmount: number }) => {
-            spending[pm.paymentMethodId] = pm.totalAmount
+      const currentMonth = getMonthYear()
+      const now = new Date()
+      const prevMonth = getMonthYear(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+
+      Promise.all([
+        api.getDashboard(currentMonth).catch(() => ({})),
+        api.getDashboard(prevMonth).catch(() => ({})),
+      ]).then(([curDash, prevDash]) => {
+        // Current month spending
+        const curSpending: Record<string, number> = {}
+        if (curDash.paymentMethodBreakdown && Array.isArray(curDash.paymentMethodBreakdown)) {
+          curDash.paymentMethodBreakdown.forEach((pm: { paymentMethodId: string; totalAmount: number }) => {
+            curSpending[pm.paymentMethodId] = pm.totalAmount
           })
         }
-        setMethodSpending(spending)
+        setMethodSpending(curSpending)
+
+        // Previous month spending
+        const prevSpending: Record<string, number> = {}
+        if (prevDash.paymentMethodBreakdown && Array.isArray(prevDash.paymentMethodBreakdown)) {
+          prevDash.paymentMethodBreakdown.forEach((pm: { paymentMethodId: string; totalAmount: number }) => {
+            prevSpending[pm.paymentMethodId] = pm.totalAmount
+          })
+        }
+        setPrevMonthSpending(prevSpending)
       }).catch(() => {})
+
+      // Fetch sparkline data: last 7 days of spending per payment method
+      // We get this from the transactions API
+      const now2 = new Date()
+      const sevenDaysAgo = new Date(now2)
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      api.getTransactions({
+        type: 'expense',
+        limit: '200',
+      }).then((res) => {
+        const transactions = Array.isArray(res) ? res : (res as { transactions: PaymentMethod[] }).transactions || []
+        const dailyByMethod: Record<string, number[]> = {}
+
+        // Initialize 7 days of 0s for each method
+        methods.forEach((m) => {
+          dailyByMethod[m.id] = Array(7).fill(0)
+        })
+
+        // Group transactions by payment method and day
+        transactions.forEach((tx: { paymentMethodId?: string | null; amount: number; date: string }) => {
+          if (!tx.paymentMethodId || !dailyByMethod[tx.paymentMethodId]) return
+          const txDate = new Date(tx.date)
+          const diffDays = Math.floor((now2.getTime() - txDate.getTime()) / (1000 * 60 * 60 * 24))
+          if (diffDays >= 0 && diffDays < 7) {
+            dailyByMethod[tx.paymentMethodId][6 - diffDays] += tx.amount
+          }
+        })
+
+        setSparklineData(dailyByMethod)
+      }).catch(() => {
+        // Fallback: empty sparklines
+        const empty: Record<string, number[]> = {}
+        methods.forEach((m) => {
+          empty[m.id] = []
+        })
+        setSparklineData(empty)
+      })
     }
   }, [methods])
 
-  // Summary counts by type
-  const cashCount = methods.filter((m) => m.type === 'cash').length
-  const ewalletCount = methods.filter((m) => m.type === 'ewallet').length
-  const bankCount = methods.filter((m) => m.type === 'bank').length
+  // ── Dialog Handlers ──────────────────────────────────────────────────
 
-  // Open dialog for adding
   const openAddDialog = () => {
     setEditingId(null)
     setFormName('')
@@ -239,7 +388,6 @@ export default function Metode() {
     setDialogOpen(true)
   }
 
-  // Open dialog for editing
   const openEditDialog = (method: PaymentMethod) => {
     setEditingId(method.id)
     setFormName(method.name)
@@ -250,7 +398,6 @@ export default function Metode() {
     setDialogOpen(true)
   }
 
-  // Submit handler (create or update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -299,7 +446,6 @@ export default function Metode() {
     }
   }
 
-  // Delete handler
   const handleDelete = async () => {
     if (!deleteId) return
 
@@ -340,54 +486,40 @@ export default function Metode() {
 
       {/* ── Summary Banner ─────────────────────────────────────────────── */}
       {methods.length > 0 && (
-        <Card className="border-border/50 bg-gradient-to-br from-muted/30 to-card overflow-hidden">
-          <CardContent className="p-4">
+        <Card className="border-border/50 bg-gradient-to-br from-sky-50/60 via-teal-50/30 to-card dark:from-sky-950/15 dark:via-teal-950/5 dark:to-card overflow-hidden">
+          <CardContent className="p-4 md:p-5">
             <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {/* Cash count */}
-                <div className="flex items-center gap-2">
-                  <div className="rounded-full bg-green-100 p-2 dark:bg-green-900/30">
-                    <Banknote className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-sky-700 dark:text-sky-400">
+                  Total Saldo Seluruh Metode
+                </p>
+                <p className="text-xl font-bold tabular-nums text-foreground">
+                  {formatCurrency(animatedTotalBalance)}
+                </p>
+                <div className="flex items-center gap-4 mt-2">
+                  {/* Cash count */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="rounded-full bg-green-100 p-1 dark:bg-green-900/30">
+                      <Banknote className="h-3 w-3 text-green-600 dark:text-green-400" />
+                    </div>
+                    <span className="text-xs text-muted-foreground">{cashCount} Tunai</span>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Tunai</p>
-                    <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                      {cashCount}
-                    </p>
+                  {/* E-Wallet count */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="rounded-full bg-purple-100 p-1 dark:bg-purple-900/30">
+                      <Smartphone className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <span className="text-xs text-muted-foreground">{ewalletCount} E-Wallet</span>
                   </div>
-                </div>
-
-                <div className="h-8 w-px bg-border" />
-
-                {/* E-Wallet count */}
-                <div className="flex items-center gap-2">
-                  <div className="rounded-full bg-purple-100 p-2 dark:bg-purple-900/30">
-                    <Smartphone className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">E-Wallet</p>
-                    <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                      {ewalletCount}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="h-8 w-px bg-border" />
-
-                {/* Bank count */}
-                <div className="flex items-center gap-2">
-                  <div className="rounded-full bg-sky-100 p-2 dark:bg-sky-900/30">
-                    <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Bank</p>
-                    <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
-                      {bankCount}
-                    </p>
+                  {/* Bank count */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="rounded-full bg-sky-100 p-1 dark:bg-sky-900/30">
+                      <Building2 className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+                    </div>
+                    <span className="text-xs text-muted-foreground">{bankCount} Bank</span>
                   </div>
                 </div>
               </div>
-
               <Badge variant="secondary" className="text-xs">
                 Total: {methods.length}
               </Badge>
@@ -400,91 +532,147 @@ export default function Metode() {
       {methods.length === 0 ? (
         <EmptyState onAdd={openAddDialog} />
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <motion.div
+          className="grid grid-cols-2 gap-4 lg:grid-cols-3"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {methods.map((method) => {
             const config = TYPE_CONFIG[(method.type as PaymentMethodType) ?? 'cash']
             const monthlySpent = methodSpending[method.id]
+            const prevSpent = prevMonthSpending[method.id]
+            const sparkPoints = sparklineData[method.id]
+
+            // Balance change indicator
+            const spendingChange = monthlySpent !== undefined && prevSpent !== undefined && prevSpent > 0
+              ? Math.round(((monthlySpent - prevSpent) / prevSpent) * 100)
+              : null
+            const spendingIncreased = spendingChange !== null && spendingChange > 0
 
             return (
-              <Card
-                key={method.id}
-                className={`relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${config.cardBorderClass} ${config.cardBgClass}`}
-              >
-                {/* Subtle border pattern overlay */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-50">
-                  <div
-                    className={`absolute -right-4 -top-4 h-16 w-16 rounded-full ${config.patternColor}`}
-                  />
-                  <div
-                    className={`absolute -left-2 -bottom-2 h-12 w-12 rounded-full ${config.patternColor}`}
-                  />
-                </div>
-
-                <CardContent className="p-4 relative">
-                  {/* Icon, Name, Badge */}
-                  <div className="flex items-start gap-3">
+              <motion.div key={method.id} variants={cardVariants}>
+                <Card
+                  className={`relative overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${config.cardBorderClass} ${config.cardBgClass} ${config.shadowColor}`}
+                >
+                  {/* Subtle border pattern overlay */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-50">
                     <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${config.iconBgClass}`}
-                    >
-                      <span className={config.iconTextClass}>{config.icon}</span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {method.name}
-                      </p>
-                      <Badge
-                        variant="secondary"
-                        className={`mt-1 text-xs ${config.badgeClass}`}
+                      className={`absolute -right-4 -top-4 h-16 w-16 rounded-full ${config.patternColor}`}
+                    />
+                    <div
+                      className={`absolute -left-2 -bottom-2 h-12 w-12 rounded-full ${config.patternColor}`}
+                    />
+                  </div>
+
+                  <CardContent className="p-4 relative">
+                    {/* Icon, Name, Badge */}
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${config.iconBgClass}`}
                       >
-                        {config.label}
-                      </Badge>
+                        <span className={config.iconTextClass}>{config.icon}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {method.name}
+                        </p>
+                        <Badge
+                          variant="secondary"
+                          className={`mt-1 text-xs ${config.badgeClass}`}
+                        >
+                          {config.label}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Initial Balance */}
-                  <div className="mt-3">
-                    <p className="text-xs text-muted-foreground">Saldo Awal</p>
-                    <p className="text-sm font-semibold text-foreground">
-                      {formatCurrency(method.initialBalance ?? 0)}
-                    </p>
-                  </div>
-
-                  {/* Monthly spending indicator */}
-                  {monthlySpent !== undefined && monthlySpent > 0 && (
-                    <div className="mt-2 flex items-center gap-1">
-                      <TrendingDown className="h-3 w-3 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">
-                        Bulan ini: <span className="font-medium text-foreground">{formatCurrency(monthlySpent)}</span>
-                      </p>
+                    {/* Initial Balance */}
+                    <div className="mt-3">
+                      <p className="text-xs text-muted-foreground">Saldo Awal</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {formatCurrency(method.initialBalance ?? 0)}
+                        </p>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Actions */}
-                  <div className="mt-3 flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => openEditDialog(method)}
-                      aria-label={`Edit ${method.name}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteId(method.id)}
-                      aria-label={`Hapus ${method.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                    {/* Monthly spending indicator + sparkline */}
+                    {(monthlySpent !== undefined && monthlySpent > 0) ? (
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <TrendingDown className="h-3 w-3 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">
+                            Bulan ini: <span className="font-medium text-foreground">{formatCurrency(monthlySpent)}</span>
+                          </p>
+                        </div>
+                        {/* Mini Sparkline */}
+                        {sparkPoints && sparkPoints.length >= 2 && (
+                          <MiniSparkline
+                            data={sparkPoints}
+                            color={method.type === 'cash' ? '#22c55e' : method.type === 'ewallet' ? '#a855f7' : '#0ea5e9'}
+                            width={56}
+                            height={20}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      sparkPoints && sparkPoints.length >= 2 && (
+                        <div className="mt-2 flex items-center justify-end">
+                          <MiniSparkline
+                            data={sparkPoints}
+                            color={method.type === 'cash' ? '#22c55e' : method.type === 'ewallet' ? '#a855f7' : '#0ea5e9'}
+                            width={56}
+                            height={20}
+                          />
+                        </div>
+                      )
+                    )}
+
+                    {/* Balance change indicator */}
+                    {spendingChange !== null && (
+                      <div className={`mt-1.5 flex items-center gap-1 text-xs ${
+                        spendingIncreased
+                          ? 'text-red-500 dark:text-red-400'
+                          : 'text-emerald-500 dark:text-emerald-400'
+                      }`}>
+                        {spendingIncreased ? (
+                          <ArrowUpRight className="h-3 w-3" />
+                        ) : (
+                          <ArrowDownRight className="h-3 w-3" />
+                        )}
+                        <span className="font-medium">
+                          {spendingIncreased ? '+' : ''}{spendingChange}% dari bulan lalu
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div className="mt-3 flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditDialog(method)}
+                        aria-label={`Edit ${method.name}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteId(method.id)}
+                        aria-label={`Hapus ${method.name}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             )
           })}
-        </div>
+        </motion.div>
       )}
 
       {/* ── Add/Edit Dialog ─────────────────────────────────────────────── */}

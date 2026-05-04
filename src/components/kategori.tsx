@@ -31,10 +31,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Pencil, Trash2, Tag, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Tag, ArrowDownLeft, ArrowUpRight, Receipt } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
+import { motion } from 'framer-motion'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Category {
@@ -58,6 +59,31 @@ const EMOJI_SUGGESTIONS = [
   '✈️', '🏋️', '🎁', '🐕', '💄', '🔧', '🚌', '☕', '📖', '🎵',
   '💰', '💵', '📈', '🏦', '💼', '🎯', '💎', '🪙', '🎰', '🏆',
 ]
+
+// ── Animation Variants ─────────────────────────────────────────────────────
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+}
+
+const cardVariants = {
+  hidden: { opacity: 0, scale: 0.9, y: 10 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.3,
+      ease: 'easeOut',
+    },
+  },
+}
 
 // ── Loading Skeleton ───────────────────────────────────────────────────────
 function CategoryGridSkeleton() {
@@ -104,65 +130,84 @@ function CategoryCard({
   onEdit,
   onDelete,
   monthlySpent,
+  transactionCount,
 }: {
   category: Category
   onEdit: (cat: Category) => void
   onDelete: (cat: Category) => void
   monthlySpent?: number
+  transactionCount?: number
 }) {
   const isExpense = category.type === 'expense'
 
   return (
-    <Card className={`group relative cursor-default overflow-hidden border py-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
-      isExpense
-        ? 'bg-gradient-to-br from-red-50/60 to-card hover:border-red-200 dark:from-red-950/10 dark:hover:border-red-900/40'
-        : 'bg-gradient-to-br from-emerald-50/60 to-card hover:border-emerald-200 dark:from-emerald-950/10 dark:hover:border-emerald-900/40'
-    }`}>
-      <CardContent className="flex flex-col items-center gap-2 p-4">
-        {/* Emoji Icon */}
-        <span className="text-3xl leading-none" role="img" aria-label={category.name}>
-          {category.icon || '📝'}
-        </span>
+    <motion.div variants={cardVariants}>
+      <Card className={`group relative cursor-default overflow-hidden border py-0 transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
+        isExpense
+          ? 'bg-gradient-to-br from-red-50/60 to-card hover:border-red-200 hover:shadow-red-200/30 dark:from-red-950/10 dark:hover:border-red-900/40 dark:hover:shadow-red-900/20'
+          : 'bg-gradient-to-br from-emerald-50/60 to-card hover:border-emerald-200 hover:shadow-emerald-200/30 dark:from-emerald-950/10 dark:hover:border-emerald-900/40 dark:hover:shadow-emerald-900/20'
+      }`}>
+        <CardContent className="flex flex-col items-center gap-2 p-4">
+          {/* Emoji Icon */}
+          <span className="text-3xl leading-none" role="img" aria-label={category.name}>
+            {category.icon || '📝'}
+          </span>
 
-        {/* Name */}
-        <p className="max-w-full truncate text-center text-sm font-medium">
-          {category.name}
-        </p>
-
-        {/* Monthly spending indicator */}
-        {monthlySpent !== undefined && monthlySpent > 0 && (
-          <p className={`text-xs font-medium truncate max-w-full ${
-            isExpense
-              ? 'text-red-600 dark:text-red-400'
-              : 'text-emerald-600 dark:text-emerald-400'
-          }`}>
-            {formatCurrency(monthlySpent)}
+          {/* Name */}
+          <p className="max-w-full truncate text-center text-sm font-medium">
+            {category.name}
           </p>
-        )}
 
-        {/* Action Buttons (visible on hover) */}
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => onEdit(category)}
-            aria-label={`Edit ${category.name}`}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            onClick={() => onDelete(category)}
-            aria-label={`Hapus ${category.name}`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          {/* Transaction count badge */}
+          {transactionCount !== undefined && transactionCount > 0 && (
+            <Badge
+              variant="secondary"
+              className={`text-[10px] h-5 px-1.5 gap-0.5 ${
+                isExpense
+                  ? 'bg-red-100 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                  : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+              }`}
+            >
+              <Receipt className="h-2.5 w-2.5" />
+              {transactionCount}
+            </Badge>
+          )}
+
+          {/* Monthly spending indicator */}
+          {monthlySpent !== undefined && monthlySpent > 0 && (
+            <p className={`text-xs font-medium truncate max-w-full ${
+              isExpense
+                ? 'text-red-600 dark:text-red-400'
+                : 'text-emerald-600 dark:text-emerald-400'
+            }`}>
+              {formatCurrency(monthlySpent)}
+            </p>
+          )}
+
+          {/* Action Buttons (visible on hover) */}
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => onEdit(category)}
+              aria-label={`Edit ${category.name}`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() => onDelete(category)}
+              aria-label={`Hapus ${category.name}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 
@@ -177,6 +222,9 @@ export default function Kategori() {
 
   // Spending data per category (from dashboard)
   const [categorySpending, setCategorySpending] = useState<Record<string, number>>({})
+
+  // Transaction count per category (from analytics)
+  const [categoryTxCount, setCategoryTxCount] = useState<Record<string, number>>({})
 
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -211,10 +259,14 @@ export default function Kategori() {
     fetchCategories()
   }, [fetchCategories])
 
-  // Fetch spending data from dashboard
+  // Fetch spending data and transaction counts from dashboard + analytics
   useEffect(() => {
     if (categories.length > 0) {
-      api.getDashboard().then((dash) => {
+      Promise.all([
+        api.getDashboard().catch(() => ({})),
+        api.getAnalytics().catch(() => ({ categoryBreakdown: [] })),
+      ]).then(([dash, analytics]) => {
+        // Category spending from dashboard topCategories
         const spending: Record<string, number> = {}
         if (dash.topCategories && Array.isArray(dash.topCategories)) {
           dash.topCategories.forEach((tc: { categoryId: string; totalAmount: number }) => {
@@ -222,6 +274,15 @@ export default function Kategori() {
           })
         }
         setCategorySpending(spending)
+
+        // Transaction counts from analytics categoryBreakdown
+        const txCounts: Record<string, number> = {}
+        if (analytics.categoryBreakdown && Array.isArray(analytics.categoryBreakdown)) {
+          analytics.categoryBreakdown.forEach((cb: { categoryId: string; transactionCount: number }) => {
+            txCounts[cb.categoryId] = cb.transactionCount
+          })
+        }
+        setCategoryTxCount(txCounts)
       }).catch(() => {})
     }
   }, [categories])
@@ -435,7 +496,12 @@ export default function Kategori() {
             </div>
 
             {expenseCategories.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <motion.div
+                className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+              >
                 {expenseCategories.map((cat) => (
                   <CategoryCard
                     key={cat.id}
@@ -443,18 +509,21 @@ export default function Kategori() {
                     onEdit={openEditDialog}
                     onDelete={openDeleteConfirm}
                     monthlySpent={categorySpending[cat.id]}
+                    transactionCount={categoryTxCount[cat.id]}
                   />
                 ))}
 
                 {/* Quick add card */}
-                <button
-                  onClick={() => openAddDialog('expense')}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-muted-foreground/20 p-4 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-                >
-                  <Plus className="h-6 w-6" />
-                  <span className="text-xs">Tambah</span>
-                </button>
-              </div>
+                <motion.div variants={cardVariants}>
+                  <button
+                    onClick={() => openAddDialog('expense')}
+                    className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-muted-foreground/20 p-4 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                  >
+                    <Plus className="h-6 w-6" />
+                    <span className="text-xs">Tambah</span>
+                  </button>
+                </motion.div>
+              </motion.div>
             ) : (
               <EmptyCategoryState type="expense" onAdd={() => openAddDialog('expense')} />
             )}
@@ -475,7 +544,12 @@ export default function Kategori() {
             </div>
 
             {incomeCategories.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              <motion.div
+                className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+              >
                 {incomeCategories.map((cat) => (
                   <CategoryCard
                     key={cat.id}
@@ -483,18 +557,21 @@ export default function Kategori() {
                     onEdit={openEditDialog}
                     onDelete={openDeleteConfirm}
                     monthlySpent={categorySpending[cat.id]}
+                    transactionCount={categoryTxCount[cat.id]}
                   />
                 ))}
 
                 {/* Quick add card */}
-                <button
-                  onClick={() => openAddDialog('income')}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-muted-foreground/20 p-4 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-                >
-                  <Plus className="h-6 w-6" />
-                  <span className="text-xs">Tambah</span>
-                </button>
-              </div>
+                <motion.div variants={cardVariants}>
+                  <button
+                    onClick={() => openAddDialog('income')}
+                    className="flex h-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-muted-foreground/20 p-4 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                  >
+                    <Plus className="h-6 w-6" />
+                    <span className="text-xs">Tambah</span>
+                  </button>
+                </motion.div>
+              </motion.div>
             ) : (
               <EmptyCategoryState type="income" onAdd={() => openAddDialog('income')} />
             )}
@@ -512,11 +589,19 @@ export default function Kategori() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Icon Preview */}
+            {/* Icon Preview with scale animation */}
             <div className="flex flex-col items-center gap-2">
-              <span className="text-5xl leading-none" role="img" aria-label={formData.name || 'Ikon'}>
+              <motion.span
+                key={formData.icon}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                className="text-5xl leading-none"
+                role="img"
+                aria-label={formData.name || 'Ikon'}
+              >
                 {formData.icon || '📝'}
-              </span>
+              </motion.span>
               <p className="text-xs text-muted-foreground">Pratinjau ikon</p>
             </div>
 
@@ -530,19 +615,24 @@ export default function Kategori() {
                 placeholder="Masukkan emoji, misalnya 🍕"
                 className="text-center text-2xl"
               />
-              {/* Emoji Suggestions */}
+              {/* Emoji Suggestions with scale animation on selected */}
               <div className="flex flex-wrap gap-1.5">
                 {EMOJI_SUGGESTIONS.map((emoji) => (
-                  <button
+                  <motion.button
                     key={emoji}
                     type="button"
                     onClick={() => setFormData((prev) => ({ ...prev, icon: emoji }))}
+                    whileTap={{ scale: 0.85 }}
+                    animate={formData.icon === emoji ? { scale: 1.2 } : { scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
                     className={`rounded-md p-1.5 text-lg transition-colors hover:bg-muted ${
-                      formData.icon === emoji ? 'bg-primary/10 ring-1 ring-primary' : ''
+                      formData.icon === emoji
+                        ? 'bg-primary/10 ring-2 ring-primary shadow-sm'
+                        : ''
                     }`}
                   >
                     {emoji}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>

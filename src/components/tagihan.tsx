@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import {
   Tabs,
-  TabsContent,
   TabsList,
   TabsTrigger,
 } from '@/components/ui/tabs'
@@ -49,8 +48,12 @@ import {
   AlertTriangle,
   Clock,
   RefreshCw,
+  CheckCircle2,
+  Hourglass,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
+import { motion } from 'framer-motion'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -127,7 +130,6 @@ const INITIAL_FORM: FormData = {
 function getDaysUntilDue(dueDate: string): number {
   const due = new Date(dueDate)
   const now = new Date()
-  // Normalize to start of day for accurate comparison
   due.setHours(0, 0, 0, 0)
   now.setHours(0, 0, 0, 0)
   return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
@@ -183,6 +185,58 @@ function getDaysLabel(daysUntil: number): string {
   return `${daysUntil} hari lagi`
 }
 
+/** Get timeline dot color based on bill urgency */
+function getTimelineDotClass(daysUntil: number, status: string): string {
+  if (status === 'paid') return 'bg-emerald-500'
+  if (daysUntil < 0) return 'bg-red-500 animate-pulse'
+  if (daysUntil <= 3) return 'bg-red-400'
+  if (daysUntil <= 7) return 'bg-orange-400'
+  return 'bg-emerald-400'
+}
+
+// ── Circular Progress ──────────────────────────────────────────────────────
+
+function CircularProgress({
+  percentage,
+  size = 56,
+  strokeWidth = 5,
+  colorClass = 'text-orange-500',
+}: {
+  percentage: number
+  size?: number
+  strokeWidth?: number
+  colorClass?: string
+}) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (Math.min(percentage, 100) / 100) * circumference
+
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className="stroke-muted"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className={`${colorClass} stroke-current`}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+      />
+    </svg>
+  )
+}
+
 // ── Skeleton ───────────────────────────────────────────────────────────────
 
 function BillSkeleton() {
@@ -213,6 +267,7 @@ function BillSkeleton() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
+      <Skeleton className="h-28 w-full rounded-xl" />
       {Array.from({ length: 4 }).map((_, i) => (
         <BillSkeleton key={i} />
       ))}
@@ -240,6 +295,21 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       </Button>
     </div>
   )
+}
+
+// ── Animation Variants ─────────────────────────────────────────────────────
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.05,
+      duration: 0.3,
+      ease: 'easeOut',
+    },
+  }),
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -322,6 +392,24 @@ export default function Tagihan() {
       paid: bills.filter((b) => b.status === 'paid').length,
     }),
     [bills]
+  )
+
+  // ── Summary calculations ───────────────────────────────────────────────
+
+  const totalUnpaidAmount = useMemo(
+    () => bills.filter((b) => b.status === 'pending').reduce((sum, b) => sum + b.amount, 0),
+    [bills]
+  )
+
+  const paidPercentage = useMemo(
+    () => (counts.all > 0 ? Math.round((counts.paid / counts.all) * 100) : 0),
+    [counts]
+  )
+
+  const animatedUnpaidAmount = useAnimatedCounter(
+    Math.round(totalUnpaidAmount),
+    800,
+    !loading && counts.all > 0
   )
 
   // ── Dialog Handlers ────────────────────────────────────────────────────
@@ -409,7 +497,6 @@ export default function Tagihan() {
 
   const handlePay = async () => {
     if (!payTarget) return
-    const isRecurring = payTarget.recurring && payTarget.recurring !== 'none'
     setPaying(true)
     try {
       const result = await api.payBill(payTarget.id)
@@ -477,6 +564,88 @@ export default function Tagihan() {
         </Button>
       </div>
 
+      {/* ── Summary Banner ──────────────────────────────────────────────── */}
+      {!loading && counts.all > 0 && (
+        <Card className="border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50 to-white dark:from-orange-950/20 dark:via-amber-950/10 dark:to-card dark:border-orange-900/50 overflow-hidden relative">
+          <CardContent className="p-4 md:p-5">
+            <div className="flex items-center gap-4">
+              {/* Circular Progress */}
+              <div className="relative flex-shrink-0">
+                <CircularProgress
+                  percentage={paidPercentage}
+                  size={56}
+                  strokeWidth={5}
+                  colorClass={paidPercentage >= 75 ? 'text-emerald-500' : paidPercentage >= 50 ? 'text-orange-500' : 'text-red-500'}
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs font-bold text-foreground">{paidPercentage}%</span>
+                </div>
+              </div>
+
+              {/* Summary Info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-orange-700 dark:text-orange-400">
+                  Total Belum Dibayar
+                </p>
+                <p className="text-xl font-bold tabular-nums text-foreground">
+                  {formatCurrency(animatedUnpaidAmount)}
+                </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex items-center gap-1">
+                    <Hourglass className="h-3.5 w-3.5 text-orange-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {counts.pending} menunggu
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-xs text-muted-foreground">
+                      {counts.paid} lunas
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right side: paid count fraction */}
+              <div className="text-right flex-shrink-0">
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {counts.paid}/{counts.all}
+                </p>
+                <p className="text-xs text-muted-foreground">Lunas</p>
+              </div>
+            </div>
+
+            {/* Progress bar showing % of bills paid this month */}
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Progres Pelunasan</span>
+                <span className={`text-xs font-medium ${
+                  paidPercentage >= 75
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : paidPercentage >= 50
+                      ? 'text-orange-600 dark:text-orange-400'
+                      : 'text-red-600 dark:text-red-400'
+                }`}>
+                  {paidPercentage}%
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full progress-animate ${
+                    paidPercentage >= 75
+                      ? 'bg-emerald-500'
+                      : paidPercentage >= 50
+                        ? 'bg-orange-500'
+                        : 'bg-red-500'
+                  }`}
+                  style={{ width: `${paidPercentage}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Filter Tabs ────────────────────────────────────────────────── */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
@@ -505,8 +674,6 @@ export default function Tagihan() {
             )}
           </TabsTrigger>
         </TabsList>
-
-        {/* Bill list is rendered below tabs regardless of tab content */}
       </Tabs>
 
       {/* ── Bill List ──────────────────────────────────────────────────── */}
@@ -520,134 +687,155 @@ export default function Tagihan() {
         </Card>
       ) : (
         <div className="space-y-3 max-h-[68vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">
-          {filteredBills.map((bill) => {
+          {filteredBills.map((bill, index) => {
             const daysUntil = getDaysUntilDue(bill.dueDate)
             const dueStyle = getDueDateStyle(daysUntil)
             const isPending = bill.status === 'pending'
+            const isOverdue = isPending && daysUntil < 0
             const DueIcon = dueStyle.icon
+            const dotClass = getTimelineDotClass(daysUntil, bill.status)
 
             return (
-              <Card
+              <motion.div
                 key={bill.id}
-                className={`transition-colors ${dueStyle.borderClass} ${dueStyle.bgClass} ${
-                  isPending ? '' : 'opacity-70'
-                }`}
+                custom={index}
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
               >
-                <CardContent className="p-4 space-y-3">
-                  {/* Top row: Name + Amount */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-1">
-                      <h3 className="text-base font-semibold text-foreground truncate">
-                        {bill.name}
-                      </h3>
-                      {/* Due date with icon */}
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5 shrink-0" />
-                        <span>{formatDate(bill.dueDate)}</span>
-                        <span className="text-xs">•</span>
-                        <span className={`text-xs font-medium ${dueStyle.textClass}`}>
-                          {getDaysLabel(daysUntil)}
-                        </span>
+                <Card
+                  className={`relative overflow-hidden transition-colors ${dueStyle.borderClass} ${dueStyle.bgClass} ${
+                    isPending ? '' : 'opacity-70'
+                  } ${isOverdue ? 'ring-1 ring-red-400/30 dark:ring-red-600/30' : ''}`}
+                >
+                  {/* Animated urgency glow for overdue bills */}
+                  {isOverdue && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="absolute inset-0 bg-red-500/5 animate-pulse rounded-xl" />
+                    </div>
+                  )}
+
+                  {/* Timeline indicator dot */}
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 flex items-start pt-5">
+                    <div className={`w-2.5 h-2.5 rounded-full ${dotClass} ml-0.5 shadow-sm`} />
+                  </div>
+
+                  <CardContent className="p-4 pl-5 space-y-3 relative">
+                    {/* Top row: Name + Amount */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <h3 className="text-base font-semibold text-foreground truncate">
+                          {bill.name}
+                        </h3>
+                        {/* Due date with icon */}
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5 shrink-0" />
+                          <span>{formatDate(bill.dueDate)}</span>
+                          <span className="text-xs">•</span>
+                          <span className={`text-xs font-medium ${dueStyle.textClass}`}>
+                            {getDaysLabel(daysUntil)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-base font-bold tabular-nums text-foreground">
+                          {formatCurrency(bill.amount)}
+                        </p>
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-base font-bold tabular-nums text-foreground">
-                        {formatCurrency(bill.amount)}
+
+                    {/* Due date warning */}
+                    {dueStyle.label && DueIcon && isPending && (
+                      <div className={`flex items-center gap-1.5 text-xs font-medium ${dueStyle.textClass}`}>
+                        <DueIcon className="h-3.5 w-3.5" />
+                        <span>{dueStyle.label}</span>
+                      </div>
+                    )}
+
+                    {/* Badges row */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* Status badge */}
+                      {isPending ? (
+                        <Badge
+                          variant="outline"
+                          className="border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+                        >
+                          <Clock className="mr-1 h-3 w-3" />
+                          Belum Dibayar
+                        </Badge>
+                      ) : (
+                        <Badge className="border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/30 dark:text-green-400">
+                          Lunas
+                        </Badge>
+                      )}
+
+                      {/* Recurring badge */}
+                      {bill.recurring && bill.recurring !== 'none' && (
+                        <Badge variant="secondary" className="gap-1">
+                          <RefreshCw className="h-3 w-3" />
+                          {RECURRING_LABELS[bill.recurring] || bill.recurring}
+                        </Badge>
+                      )}
+
+                      {/* Category badge */}
+                      {bill.category && (
+                        <Badge variant="secondary" className="gap-1">
+                          <span>{bill.category.icon}</span>
+                          {bill.category.name}
+                        </Badge>
+                      )}
+
+                      {/* Payment method badge */}
+                      {bill.paymentMethod && (
+                        <Badge variant="outline" className="gap-1">
+                          {bill.paymentMethod.name}
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Note */}
+                    {bill.note && (
+                      <p className="text-xs text-muted-foreground italic truncate">
+                        {bill.note}
                       </p>
-                    </div>
-                  </div>
-
-                  {/* Due date warning */}
-                  {dueStyle.label && DueIcon && isPending && (
-                    <div className={`flex items-center gap-1.5 text-xs font-medium ${dueStyle.textClass}`}>
-                      <DueIcon className="h-3.5 w-3.5" />
-                      <span>{dueStyle.label}</span>
-                    </div>
-                  )}
-
-                  {/* Badges row */}
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {/* Status badge */}
-                    {isPending ? (
-                      <Badge
-                        variant="outline"
-                        className="border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
-                      >
-                        <Clock className="mr-1 h-3 w-3" />
-                        Belum Dibayar
-                      </Badge>
-                    ) : (
-                      <Badge className="border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950/30 dark:text-green-400">
-                        Lunas
-                      </Badge>
                     )}
+                  </CardContent>
 
-                    {/* Recurring badge */}
-                    {bill.recurring && bill.recurring !== 'none' && (
-                      <Badge variant="secondary" className="gap-1">
-                        <RefreshCw className="h-3 w-3" />
-                        {RECURRING_LABELS[bill.recurring] || bill.recurring}
-                      </Badge>
-                    )}
-
-                    {/* Category badge */}
-                    {bill.category && (
-                      <Badge variant="secondary" className="gap-1">
-                        <span>{bill.category.icon}</span>
-                        {bill.category.name}
-                      </Badge>
-                    )}
-
-                    {/* Payment method badge */}
-                    {bill.paymentMethod && (
-                      <Badge variant="outline" className="gap-1">
-                        {bill.paymentMethod.name}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Note */}
-                  {bill.note && (
-                    <p className="text-xs text-muted-foreground italic truncate">
-                      {bill.note}
-                    </p>
-                  )}
-                </CardContent>
-
-                {/* Actions */}
-                <CardFooter className="border-t px-4 py-3">
-                  <div className="flex w-full items-center gap-2">
-                    {isPending && (
+                  {/* Actions */}
+                  <CardFooter className="border-t px-4 py-3 pl-5 relative">
+                    <div className="flex w-full items-center gap-2">
+                      {isPending && (
+                        <Button
+                          size="sm"
+                          className="gap-1.5 font-semibold"
+                          onClick={() => setPayTarget(bill)}
+                        >
+                          <CreditCard className="h-3.5 w-3.5" />
+                          Bayar
+                        </Button>
+                      )}
                       <Button
-                        size="sm"
-                        className="gap-1.5 font-semibold"
-                        onClick={() => setPayTarget(bill)}
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditDialog(bill)}
+                        aria-label="Edit tagihan"
                       >
-                        <CreditCard className="h-3.5 w-3.5" />
-                        Bayar
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => openEditDialog(bill)}
-                      aria-label="Edit tagihan"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                      onClick={() => setDeleteTarget(bill)}
-                      aria-label="Hapus tagihan"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </CardFooter>
-              </Card>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                        onClick={() => setDeleteTarget(bill)}
+                        aria-label="Hapus tagihan"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
+              </motion.div>
             )
           })}
         </div>

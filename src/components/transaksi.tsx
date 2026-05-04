@@ -205,6 +205,7 @@ export default function Transaksi() {
   const [categories, setCategories] = useState<Category[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([])
+  const [budgetInfo, setBudgetInfo] = useState<{ budgetAmount: number; spent: number; remaining: number } | null>(null)
 
   // Loading
   const [loadingData, setLoadingData] = useState(true)
@@ -263,6 +264,30 @@ export default function Transaksi() {
     }
     loadData()
   }, [fetchCategories, fetchPaymentMethods, fetchRecentTransactions])
+
+  // Fetch budget info when category changes for expense type
+  useEffect(() => {
+    if (activeType === 'expense' && categoryId) {
+      const currentMonth = (() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      })()
+      api.getBudgets(currentMonth).then((budgets) => {
+        const budget = budgets.find((b: { categoryId: string }) => b.categoryId === categoryId)
+        if (budget) {
+          setBudgetInfo({
+            budgetAmount: budget.amount,
+            spent: budget.spent ?? 0,
+            remaining: budget.amount - (budget.spent ?? 0),
+          })
+        } else {
+          setBudgetInfo(null)
+        }
+      }).catch(() => setBudgetInfo(null))
+    } else {
+      setBudgetInfo(null)
+    }
+  }, [activeType, categoryId])
 
   // Re-fetch categories & recent when type changes
   useEffect(() => {
@@ -793,6 +818,52 @@ export default function Transaksi() {
                 )}
               </Button>
             </motion.div>
+
+            {/* Budget Context Widget */}
+            {activeType === 'expense' && budgetInfo && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className={`rounded-lg p-3 border ${
+                  budgetInfo.remaining < 0
+                    ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900/50'
+                    : budgetInfo.remaining < budgetInfo.budgetAmount * 0.2
+                      ? 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/50'
+                      : 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">Sisa Anggaran Kategori</span>
+                  <span className={`text-xs font-bold ${
+                    budgetInfo.remaining < 0
+                      ? 'text-red-600 dark:text-red-400'
+                      : budgetInfo.remaining < budgetInfo.budgetAmount * 0.2
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                  }`}>
+                    {formatCurrency(Math.max(budgetInfo.remaining, 0))}
+                    {budgetInfo.remaining < 0 && <span className="ml-1">⚠️ Lebih!</span>}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      budgetInfo.remaining < 0
+                        ? 'bg-red-500'
+                        : budgetInfo.remaining < budgetInfo.budgetAmount * 0.2
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(Math.max((budgetInfo.spent / budgetInfo.budgetAmount) * 100, 0), 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[10px] text-muted-foreground">Terpakai: {formatCurrency(budgetInfo.spent)}</span>
+                  <span className="text-[10px] text-muted-foreground">Anggaran: {formatCurrency(budgetInfo.budgetAmount)}</span>
+                </div>
+              </motion.div>
+            )}
 
             {/* Recent Transactions */}
             {!loadingData && recentTransactions.length > 0 && (

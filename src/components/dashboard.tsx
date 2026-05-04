@@ -33,9 +33,14 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronRight as ChevronRightIcon,
+  Heart,
+  Gift,
+  Star,
+  Activity,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import ReportPrint from '@/components/report-print'
+import SpendingHeatmap from '@/components/spending-heatmap'
 import {
   BarChart,
   Bar,
@@ -900,6 +905,195 @@ function TrendIndicator({ current, previous, type }: { current: number; previous
   )
 }
 
+// ── Relative time helper ──────────────────────────────────────────────────
+function getRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Baru saja'
+  if (diffMins < 60) return `${diffMins} menit lalu`
+  if (diffHours < 24) return `${diffHours} jam lalu`
+  if (diffDays === 1) return 'Kemarin'
+  if (diffDays < 7) return `${diffDays} hari lalu`
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`
+  return formatDate(dateStr)
+}
+
+// ── Activity Timeline Item Types ──────────────────────────────────────────
+interface ActivityItem {
+  id: string
+  type: 'transaction' | 'budget_warning' | 'bill_payment' | 'savings_milestone' | 'wishlist_purchase'
+  icon: React.ElementType
+  iconColor: string
+  iconBg: string
+  description: string
+  relativeTime: string
+  amount?: number
+  colorDot: string
+  timestamp: number
+}
+
+function generateActivityItems(data: DashboardData): ActivityItem[] {
+  const items: ActivityItem[] = []
+
+  // 1. Recent transactions (up to 5)
+  for (const tx of data.recentTransactions.slice(0, 5)) {
+    const isExpense = tx.type === 'expense'
+    const isIncome = tx.type === 'income'
+    const catName = tx.category?.name ?? 'Lainnya'
+    const sourceLabel = tx.source === 'wishlist' ? ' (Wishlist)' : tx.source === 'bill' ? ' (Tagihan)' : ''
+
+    items.push({
+      id: `tx-${tx.id}`,
+      type: tx.source === 'wishlist' ? 'wishlist_purchase' : tx.source === 'bill' ? 'bill_payment' : 'transaction',
+      icon: isExpense ? ArrowDownLeft : isIncome ? ArrowUpRight : ArrowRight,
+      iconColor: isExpense ? '#ef4444' : isIncome ? '#22c55e' : '#14b8a6',
+      iconBg: isExpense ? '#fef2f2' : isIncome ? '#f0fdf4' : '#f0fdfa',
+      description: `${isExpense ? 'Pengeluaran' : isIncome ? 'Pemasukan' : 'Transfer'}: ${catName}${sourceLabel}`,
+      relativeTime: getRelativeTime(tx.date),
+      amount: tx.amount,
+      colorDot: isExpense ? '#ef4444' : isIncome ? '#22c55e' : '#14b8a6',
+      timestamp: new Date(tx.date).getTime(),
+    })
+  }
+
+  // 2. Budget warnings (categories exceeding 80% of budget)
+  if (data.budgetProgress) {
+    for (const b of data.budgetProgress) {
+      if (b.percentage >= 80) {
+        const isOverspent = b.percentage > 100
+        items.push({
+          id: `budget-${b.id}`,
+          type: 'budget_warning',
+          icon: isOverspent ? AlertCircle : AlertTriangle,
+          iconColor: isOverspent ? '#ef4444' : '#f59e0b',
+          iconBg: isOverspent ? '#fef2f2' : '#fffbeb',
+          description: isOverspent
+            ? `Anggaran ${b.categoryName} terlampaui (${b.percentage.toFixed(0)}%)`
+            : `Anggaran ${b.categoryName} hampir habis (${b.percentage.toFixed(0)}%)`,
+          relativeTime: 'Bulan ini',
+          amount: b.budgetAmount - b.spent,
+          colorDot: isOverspent ? '#ef4444' : '#f59e0b',
+          timestamp: Date.now() - 1000, // slightly before now
+        })
+      }
+    }
+  }
+
+  // 3. Upcoming bill payments
+  for (const bill of data.upcomingBills.slice(0, 2)) {
+    const dueDate = new Date(bill.dueDate)
+    const now = new Date()
+    const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000)
+    const isUrgent = daysUntilDue <= 3
+
+    items.push({
+      id: `bill-${bill.id}`,
+      type: 'bill_payment',
+      icon: Receipt,
+      iconColor: isUrgent ? '#ef4444' : '#f59e0b',
+      iconBg: isUrgent ? '#fef2f2' : '#fffbeb',
+      description: `Tagihan ${bill.name} ${isUrgent ? 'segera jatuh tempo!' : 'mendatang'}`,
+      relativeTime: daysUntilDue <= 0 ? 'Hari ini!' : `${daysUntilDue} hari lagi`,
+      amount: bill.amount,
+      colorDot: isUrgent ? '#ef4444' : '#f59e0b',
+      timestamp: dueDate.getTime(),
+    })
+  }
+
+  // 4. Savings goal milestones (derived from savings rate)
+  if (data.savingsRate >= 20) {
+    items.push({
+      id: 'savings-milestone',
+      type: 'savings_milestone',
+      icon: Star,
+      iconColor: '#22c55e',
+      iconBg: '#f0fdf4',
+      description: `Rasio tabungan ${data.savingsRate.toFixed(0)}% - Luar biasa!`,
+      relativeTime: 'Bulan ini',
+      colorDot: '#22c55e',
+      timestamp: Date.now() - 2000,
+    })
+  }
+
+  // Sort by timestamp descending and limit to 8
+  items.sort((a, b) => b.timestamp - a.timestamp)
+  return items.slice(0, 8)
+}
+
+function ActivityTimeline({ data }: { data: DashboardData }) {
+  const items = useMemo(() => generateActivityItems(data), [data])
+
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <Activity className="mb-2 h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">Belum ada aktivitas</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative space-y-0">
+      {/* Timeline line */}
+      <div className="absolute left-[19px] top-2 bottom-2 w-px bg-gradient-to-b from-teal-200 via-violet-200 to-transparent dark:from-teal-800 dark:via-violet-800" />
+
+      {items.map((item, index) => {
+        const IconComponent = item.icon
+        return (
+          <motion.div
+            key={item.id}
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.25, delay: index * 0.06 }}
+            className="relative flex items-start gap-3 py-2.5"
+          >
+            {/* Icon circle on timeline */}
+            <div
+              className="relative z-10 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border-2 border-background shadow-sm"
+              style={{ backgroundColor: item.iconBg }}
+            >
+              <IconComponent className="h-4 w-4" style={{ color: item.iconColor }} />
+              {/* Color dot */}
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background"
+                style={{ backgroundColor: item.colorDot }}
+              />
+            </div>
+
+            {/* Content */}
+            <div className="min-w-0 flex-1 pt-1">
+              <p className="text-sm font-medium leading-snug">{item.description}</p>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{item.relativeTime}</span>
+                {item.amount !== undefined && (
+                  <>
+                    <span className="text-xs text-muted-foreground">•</span>
+                    <span
+                      className="text-xs font-semibold"
+                      style={{ color: item.iconColor }}
+                    >
+                      {item.type === 'budget_warning' && item.amount < 0
+                        ? `Terlampaui ${formatCurrency(Math.abs(item.amount))}`
+                        : item.type === 'budget_warning'
+                          ? `Sisa ${formatCurrency(item.amount)}`
+                          : formatCurrency(item.amount)}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main Dashboard Component ───────────────────────────────────────────────
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(getMonthYear())
@@ -1757,6 +1951,39 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <GradientSeparator />
+
+      {/* ── Activity Timeline ───────────────────────────────────────────── */}
+      <Card className="relative overflow-hidden">
+        {/* Top accent line */}
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-500 via-cyan-500 to-violet-500" />
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900/30">
+                <Activity className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+              </div>
+              Linimasa Aktivitas
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setCurrentPage('history')}
+            >
+              Lihat Semua
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ActivityTimeline data={data} />
+        </CardContent>
+      </Card>
+
+      {/* ── Spending Heatmap ──────────────────────────────────────────── */}
+      <SpendingHeatmap month={currentMonth} />
     </div>
   )
 }
