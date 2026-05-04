@@ -1,13 +1,19 @@
 'use client'
 
 import { useAppStore, type Page } from '@/lib/store'
-import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarInset, SidebarTrigger, SidebarSeparator, SidebarGroup as SidebarGroupComponent } from '@/components/ui/sidebar'
+import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarInset, SidebarTrigger, SidebarSeparator } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft } from 'lucide-react'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { PageTransition } from '@/components/page-transition'
+import { api } from '@/lib/api'
+import { formatCurrency, getMonthYear, getMonthLabel } from '@/lib/format'
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { CommandPalette } from '@/components/command-palette'
 import dynamic from 'next/dynamic'
+import { useState, useEffect, useCallback } from 'react'
 
 // Dynamic imports for page components to reduce initial bundle
 const Dashboard = dynamic(() => import('@/components/dashboard'), { ssr: false })
@@ -41,10 +47,71 @@ function formatTanggalIndonesia(): string {
   return `${now.getDate()} ${BULAN_INDONESIA[now.getMonth()]} ${now.getFullYear()}`
 }
 
+// ─── Sidebar Balance Widget ────────────────────────────────────────────────────
+function SidebarBalanceWidget() {
+  const [balance, setBalance] = useState<number | null>(null)
+  const currentMonth = getMonthYear()
+
+  useEffect(() => {
+    let cancelled = false
+    api.getDashboard(currentMonth).then((data: { balance?: number }) => {
+      if (!cancelled) setBalance(data.balance ?? 0)
+    }).catch(() => {
+      if (!cancelled) setBalance(0)
+    })
+    return () => { cancelled = true }
+  }, [currentMonth])
+
+  const monthLabel = getMonthLabel(currentMonth)
+
+  return (
+    <div className="mx-3 mb-2 rounded-xl bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/20 dark:to-card border border-emerald-100 dark:border-emerald-900/30 p-3">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-100 dark:bg-emerald-900/40">
+          <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <span className="text-[11px] text-muted-foreground">Sisa Uang</span>
+      </div>
+      <div className="flex items-baseline gap-1">
+        {balance !== null ? (
+          <span className={`text-sm font-bold ${balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            {formatCurrency(balance)}
+          </span>
+        ) : (
+          <span className="text-sm font-bold text-muted-foreground">...</span>
+        )}
+      </div>
+      <span className="text-[10px] text-muted-foreground/70">{monthLabel}</span>
+    </div>
+  )
+}
+
+// ─── App Sidebar ───────────────────────────────────────────────────────────────
 function AppSidebar() {
   const { currentPage, setCurrentPage, setSidebarOpen } = useAppStore()
   const aktivitasItems = menuItems.filter(i => i.group === 'aktivitas')
   const manajemenItems = menuItems.filter(i => i.group === 'manajemen')
+  const [urgentBillCount, setUrgentBillCount] = useState(0)
+
+  // Fetch urgent bill count
+  const fetchUrgentBills = useCallback(() => {
+    api.getBills().then((bills: Array<{ status: string; dueDate: string }>) => {
+      const now = new Date()
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      const count = bills.filter(b => {
+        if (b.status !== 'pending') return false
+        const due = new Date(b.dueDate)
+        return due <= sevenDaysFromNow
+      }).length
+      setUrgentBillCount(count)
+    }).catch(() => {
+      setUrgentBillCount(0)
+    })
+  }, [])
+
+  useEffect(() => {
+    fetchUrgentBills()
+  }, [fetchUrgentBills, currentPage])
 
   return (
     <Sidebar collapsible="offcanvas" className="bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
@@ -60,6 +127,12 @@ function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarSeparator />
+
+      {/* Balance Widget */}
+      <div className="pt-2">
+        <SidebarBalanceWidget />
+      </div>
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Aktivitas</SidebarGroupLabel>
@@ -124,11 +197,25 @@ function AppSidebar() {
                         {isActive && (
                           <span className="absolute -left-1.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
                         )}
+                        {/* Notification badge for Tagihan */}
+                        {item.page === 'tagihan' && urgentBillCount > 0 && (
+                          <span className="absolute -right-2 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                            {urgentBillCount > 9 ? '9+' : urgentBillCount}
+                          </span>
+                        )}
                       </div>
                       <span className="flex-1">{item.label}</span>
-                      <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
-                        {item.shortcut}
-                      </span>
+                      {/* Bill count badge on text side for clarity */}
+                      {item.page === 'tagihan' && urgentBillCount > 0 && (
+                        <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-red-100 dark:bg-red-900/40 text-[9px] font-bold text-red-600 dark:text-red-400">
+                          {urgentBillCount}
+                        </span>
+                      )}
+                      {item.page !== 'tagihan' && (
+                        <span className="hidden lg:inline-flex items-center justify-center h-4 min-w-[24px] px-1 rounded text-[10px] font-medium text-muted-foreground/60 bg-muted/50 border border-border/50">
+                          {item.shortcut}
+                        </span>
+                      )}
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )
@@ -150,6 +237,7 @@ function AppSidebar() {
   )
 }
 
+// ─── Page Content ──────────────────────────────────────────────────────────────
 function PageContent() {
   const { currentPage } = useAppStore()
 
@@ -179,6 +267,7 @@ function PageContent() {
   }
 }
 
+// ─── Page Header ───────────────────────────────────────────────────────────────
 function PageHeader() {
   const { currentPage, setCurrentPage } = useAppStore()
   const titles: Record<Page, string> = {
@@ -218,16 +307,18 @@ function PageHeader() {
   )
 }
 
+// ─── Quick Add FAB (hidden on mobile when bottom nav is visible) ───────────────
 function QuickAddFAB() {
   const { currentPage, setCurrentPage } = useAppStore()
   if (currentPage === 'transaksi') return null
+  // Hidden on mobile (md:hidden) - bottom nav handles it
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             onClick={() => setCurrentPage('transaksi')}
-            className="fixed bottom-6 right-6 z-50 flex md:hidden h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-110 active:scale-95 transition-all focus-ring-animated"
+            className="fixed bottom-6 right-6 z-50 hidden md:flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-110 active:scale-95 transition-all focus-ring-animated"
             aria-label="Tambah Transaksi"
           >
             {/* Pulse ring */}
@@ -243,20 +334,130 @@ function QuickAddFAB() {
   )
 }
 
+// ─── Mobile Bottom Navigation ─────────────────────────────────────────────────
+const bottomNavItems: { page: Page; label: string; icon: React.ElementType }[] = [
+  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { page: 'transaksi', label: 'Transaksi', icon: ArrowLeftRight },
+  { page: 'history', label: 'History', icon: History },
+  { page: 'budget', label: 'Anggaran', icon: Target },
+]
+
+const moreMenuItems: { page: Page; label: string; icon: React.ElementType }[] = [
+  { page: 'analytics', label: 'Analisis', icon: BarChart3 },
+  { page: 'kategori', label: 'Kategori', icon: Tags },
+  { page: 'wishlist', label: 'Wishlist', icon: Heart },
+  { page: 'savings', label: 'Tabungan', icon: PiggyBank },
+  { page: 'tagihan', label: 'Tagihan', icon: Receipt },
+  { page: 'metode', label: 'Metode Bayar', icon: CreditCard },
+]
+
+function MobileBottomNav() {
+  const { currentPage, setCurrentPage } = useAppStore()
+  const [moreOpen, setMoreOpen] = useState(false)
+
+  // Check if current page is in the "more" menu
+  const isInMoreMenu = moreMenuItems.some(item => item.page === currentPage)
+
+  return (
+    <>
+      {/* Bottom Navigation Bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden border-t bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center justify-around h-16 px-1">
+          {bottomNavItems.map((item) => {
+            const isActive = currentPage === item.page
+            return (
+              <button
+                key={item.page}
+                onClick={() => setCurrentPage(item.page)}
+                className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] h-full transition-colors ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}
+                aria-label={item.label}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <item.icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium leading-tight">{item.label}</span>
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setMoreOpen(true)}
+            className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] h-full transition-colors ${isInMoreMenu ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}
+            aria-label="Lainnya"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            <span className="text-[10px] font-medium leading-tight">Lainnya</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* More Menu Sheet */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
+          <SheetHeader className="pb-2">
+            <SheetTitle className="text-base">Menu Lainnya</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">Pilih halaman yang ingin dibuka</SheetDescription>
+          </SheetHeader>
+          <div className="grid grid-cols-3 gap-3 p-4 pt-2">
+            {moreMenuItems.map((item) => {
+              const isActive = currentPage === item.page
+              return (
+                <button
+                  key={item.page}
+                  onClick={() => {
+                    setCurrentPage(item.page)
+                    setMoreOpen(false)
+                  }}
+                  className={`flex flex-col items-center gap-2 rounded-xl p-3 transition-colors ${isActive ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'}`}
+                  aria-label={item.label}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span className="text-xs font-medium">{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  )
+}
+
+// ─── Main App ──────────────────────────────────────────────────────────────────
 export default function Home() {
-  const { currentPage } = useAppStore()
+  const { currentPage, setCurrentPage } = useAppStore()
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  const toggleCommandPalette = useCallback(() => {
+    setCommandPaletteOpen((prev) => !prev)
+  }, [])
+
+  const closeCommandPalette = useCallback(() => {
+    setCommandPaletteOpen(false)
+  }, [])
+
+  useKeyboardShortcuts({
+    setCurrentPage,
+    onToggleCommandPalette: toggleCommandPalette,
+    onEscape: closeCommandPalette,
+  })
+
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
         <PageHeader />
-        <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="flex-1 overflow-auto p-4 md:p-6 pb-20 md:pb-6">
           <PageTransition pageKey={currentPage}>
             <PageContent />
           </PageTransition>
         </div>
       </SidebarInset>
       <QuickAddFAB />
+      <MobileBottomNav />
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={closeCommandPalette}
+        onNavigate={setCurrentPage}
+      />
     </SidebarProvider>
   )
 }

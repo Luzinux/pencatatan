@@ -17,6 +17,7 @@ import {
   Trophy,
   CalendarDays,
   Activity,
+  Minus,
 } from 'lucide-react'
 import {
   AreaChart,
@@ -29,7 +30,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  ReferenceLine,
 } from 'recharts'
+import { motion } from 'framer-motion'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface CategoryBreakdownItem {
@@ -99,17 +102,28 @@ const WEEKDAY_COLORS = [
   '#f97316', // Minggu - orange
 ]
 
+const TOP_EXPENSE_MEDALS = ['🥇', '🥈', '🥉']
+
 // ── Custom Tooltip ─────────────────────────────────────────────────────────
-function AreaChartTooltip({ active, payload, label }: any) {
+function AreaChartTooltip({ active, payload, label, dailyAverage }: any) {
   if (!active || !payload?.length) return null
+  const amount = payload[0].value
+  const isAboveAverage = amount > dailyAverage && dailyAverage > 0
+  const pctAbove = dailyAverage > 0 ? Math.round(((amount - dailyAverage) / dailyAverage) * 100) : 0
+
   return (
     <div className="rounded-lg border bg-background p-3 shadow-md">
       <p className="mb-1 text-sm font-medium text-muted-foreground">
         Tanggal {label}
       </p>
       <p className="text-sm font-semibold text-red-500">
-        {formatCurrency(payload[0].value)}
+        {formatCurrency(amount)}
       </p>
+      {isAboveAverage && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 font-medium">
+          ↑ {pctAbove}% di atas rata-rata
+        </p>
+      )}
     </div>
   )
 }
@@ -286,6 +300,7 @@ export default function Analytics() {
   const hasWeekDayData = data.weekDayAverage.some((d) => d.averageAmount > 0)
   const hasTopExpenses = data.topExpenses.length > 0
   const { monthlyComparison: mc } = data
+  const topExpenseMax = hasTopExpenses ? data.topExpenses[0].amount : 0
 
   return (
     <div className="space-y-6">
@@ -324,82 +339,119 @@ export default function Analytics() {
       {/* ── Monthly Comparison ──────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Expense Comparison */}
-        <Card className="border-red-200/60 bg-gradient-to-br from-red-50/50 to-white dark:border-red-900/30 dark:from-red-950/20 dark:to-card">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
-                  <ArrowDownLeft className="h-4 w-4 text-red-500" />
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Card className="border-red-200/60 bg-gradient-to-br from-red-50/50 to-white dark:border-red-900/30 dark:from-red-950/20 dark:to-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+                    <ArrowDownLeft className="h-4 w-4 text-red-500" />
+                  </div>
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                    Pengeluaran
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                  Pengeluaran
-                </span>
+                {mc.expenseChange !== 0 && (
+                  <div className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm ${
+                    mc.expenseChange > 0
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  }`}>
+                    <div className={`rounded-full p-0.5 ${mc.expenseChange > 0 ? 'bg-red-200 dark:bg-red-800/50' : 'bg-green-200 dark:bg-green-800/50'}`}>
+                      {mc.expenseChange > 0 ? (
+                        <TrendingUp className="h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="h-3 w-3" />
+                      )}
+                    </div>
+                    {Math.abs(mc.expenseChange).toFixed(1)}%
+                  </div>
+                )}
               </div>
-              {mc.expenseChange !== 0 && (
-                <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  mc.expenseChange > 0
-                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                }`}>
-                  {mc.expenseChange > 0 ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                  {Math.abs(mc.expenseChange).toFixed(1)}%
+              <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                {formatCurrency(mc.currentMonth.expense)}
+              </p>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Bulan lalu: {formatCurrency(mc.previousMonth.expense)}</span>
+                {/* vs badge */}
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    mc.expenseChange > 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' 
+                    : mc.expenseChange < 0 ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-muted text-muted-foreground'
+                  }`}>
+                    {mc.expenseChange > 0 ? '↑ Naik' : mc.expenseChange < 0 ? '↓ Turun' : '= Sama'}
+                  </span>
                 </div>
-              )}
-            </div>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {formatCurrency(mc.currentMonth.expense)}
-            </p>
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Bulan lalu: {formatCurrency(mc.previousMonth.expense)}</span>
-              <span className={mc.expenseChange > 0 ? 'text-red-500 font-medium' : mc.expenseChange < 0 ? 'text-green-500 font-medium' : ''}>
-                {mc.expenseChange > 0 ? 'Naik' : mc.expenseChange < 0 ? 'Turun' : 'Sama'}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Income Comparison */}
-        <Card className="border-green-200/60 bg-gradient-to-br from-green-50/50 to-white dark:border-green-900/30 dark:from-green-950/20 dark:to-card">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="rounded-full bg-green-100 p-2 dark:bg-green-900/30">
-                  <ArrowUpRight className="h-4 w-4 text-green-500" />
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Card className="border-green-200/60 bg-gradient-to-br from-green-50/50 to-white dark:border-green-900/30 dark:from-green-950/20 dark:to-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-green-100 p-2 dark:bg-green-900/30">
+                    <ArrowUpRight className="h-4 w-4 text-green-500" />
+                  </div>
+                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                    Pemasukan
+                  </span>
                 </div>
-                <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                  Pemasukan
+                {mc.incomeChange !== 0 && (
+                  <div className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm ${
+                    mc.incomeChange > 0
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                  }`}>
+                    <div className={`rounded-full p-0.5 ${mc.incomeChange > 0 ? 'bg-green-200 dark:bg-green-800/50' : 'bg-red-200 dark:bg-red-800/50'}`}>
+                      {mc.incomeChange > 0 ? (
+                        <TrendingUp className="h-3 w-3" />
+                      ) : (
+                        <TrendingDown className="h-3 w-3" />
+                      )}
+                    </div>
+                    {Math.abs(mc.incomeChange).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {formatCurrency(mc.currentMonth.income)}
+              </p>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Bulan lalu: {formatCurrency(mc.previousMonth.income)}</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  mc.incomeChange > 0 ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' 
+                  : mc.incomeChange < 0 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+                  : 'bg-muted text-muted-foreground'
+                }`}>
+                  {mc.incomeChange > 0 ? '↑ Naik' : mc.incomeChange < 0 ? '↓ Turun' : '= Sama'}
                 </span>
               </div>
-              {mc.incomeChange !== 0 && (
-                <div className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  mc.incomeChange > 0
-                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                }`}>
-                  {mc.incomeChange > 0 ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                  {Math.abs(mc.incomeChange).toFixed(1)}%
-                </div>
-              )}
-            </div>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {formatCurrency(mc.currentMonth.income)}
-            </p>
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Bulan lalu: {formatCurrency(mc.previousMonth.income)}</span>
-              <span className={mc.incomeChange > 0 ? 'text-green-500 font-medium' : mc.incomeChange < 0 ? 'text-red-500 font-medium' : ''}>
-                {mc.incomeChange > 0 ? 'Naik' : mc.incomeChange < 0 ? 'Turun' : 'Sama'}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* VS Badge between cards */}
+        <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+      </div>
+
+      {/* ── VS Badge (between the two cards) ───────────────────────────── */}
+      <div className="flex items-center justify-center -mt-8 sm:-mt-6 relative z-10">
+        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-background border-2 shadow-sm text-xs font-bold text-muted-foreground">
+          vs
+        </div>
       </div>
 
       {/* ── Category Breakdown ──────────────────────────────────────────── */}
@@ -416,7 +468,13 @@ export default function Analytics() {
               {data.categoryBreakdown.map((cat, index) => {
                 const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length]
                 return (
-                  <div key={cat.categoryId} className="space-y-2">
+                  <motion.div
+                    key={cat.categoryId}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.06 }}
+                    className="space-y-2"
+                  >
                     <div className="flex items-center gap-2.5">
                       <div
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base"
@@ -437,17 +495,19 @@ export default function Analytics() {
                         <p className="text-xs text-muted-foreground">{cat.percentage.toFixed(1)}%</p>
                       </div>
                     </div>
-                    {/* Horizontal bar */}
+                    {/* Horizontal bar - animated with CSS transition and staggered delay */}
                     <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-full transition-all duration-700 ease-out"
+                        className="h-full rounded-full"
                         style={{
                           width: `${cat.percentage}%`,
                           backgroundColor: color,
+                          transition: 'width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                          transitionDelay: `${index * 0.1}s`,
                         }}
                       />
                     </div>
-                  </div>
+                  </motion.div>
                 )
               })}
             </div>
@@ -502,7 +562,21 @@ export default function Analytics() {
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip content={<AreaChartTooltip />} />
+                  <Tooltip content={<AreaChartTooltip dailyAverage={dailyAverage} />} />
+                  {/* Reference line for daily average */}
+                  <ReferenceLine
+                    y={dailyAverage}
+                    stroke="#f59e0b"
+                    strokeDasharray="6 3"
+                    strokeWidth={1.5}
+                    label={{
+                      value: 'Rata-rata',
+                      position: 'right',
+                      fill: '#f59e0b',
+                      fontSize: 10,
+                      fontWeight: 600,
+                    }}
+                  />
                   <Area
                     type="monotone"
                     dataKey="amount"
@@ -511,14 +585,28 @@ export default function Analytics() {
                     fill="url(#dailyGradient)"
                     dot={(props: any) => {
                       const { cx, cy, payload } = props
-                      // Highlight days with unusually high spending (> 2x average)
-                      if (payload.amount > dailyAverage * 2 && payload.amount > 0) {
+                      // Highlight days above average with a different color/marker
+                      if (payload.amount > dailyAverage && payload.amount > 0) {
                         return (
                           <circle
                             key={`dot-${payload.day}`}
                             cx={cx}
                             cy={cy}
                             r={4}
+                            fill="#f59e0b"
+                            stroke="#fff"
+                            strokeWidth={2}
+                          />
+                        )
+                      }
+                      // Regular dots for very high spending (>2x average)
+                      if (payload.amount > dailyAverage * 2 && payload.amount > 0) {
+                        return (
+                          <circle
+                            key={`dot-high-${payload.day}`}
+                            cx={cx}
+                            cy={cy}
+                            r={5}
                             fill="#ef4444"
                             stroke="#fff"
                             strokeWidth={2}
@@ -541,9 +629,15 @@ export default function Analytics() {
               </div>
             )}
             {hasDailyData && dailyMax > 0 && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-                Titik merah = pengeluaran tinggi (&gt;2x rata-rata)
+              <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                  Di atas rata-rata
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                  Sangat tinggi (&gt;2x rata-rata)
+                </span>
               </div>
             )}
           </CardContent>
@@ -611,47 +705,69 @@ export default function Analytics() {
         <CardContent>
           {hasTopExpenses ? (
             <div className="space-y-1">
-              {data.topExpenses.map((tx, index) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/50"
-                >
-                  {/* Rank number */}
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                    index === 0
-                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                      : index === 1
-                        ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                        : index === 2
-                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                          : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {index + 1}
-                  </div>
+              {data.topExpenses.map((tx, index) => {
+                const color = CATEGORY_COLORS[index % CATEGORY_COLORS.length]
+                const relativeWidth = topExpenseMax > 0 ? (tx.amount / topExpenseMax) * 100 : 0
 
-                  {/* Category icon */}
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-base">
-                    <span role="img" aria-label={tx.categoryName}>
-                      {tx.categoryIcon}
-                    </span>
-                  </div>
+                return (
+                  <motion.div
+                    key={tx.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: index * 0.05 }}
+                    className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/50"
+                  >
+                    {/* Position badge */}
+                    <div className="shrink-0">
+                      {index < 3 ? (
+                        <div className="flex h-8 w-8 items-center justify-center text-lg">
+                          {TOP_EXPENSE_MEDALS[index]}
+                        </div>
+                      ) : (
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                          {index + 1}
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Description */}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {tx.note || tx.categoryName}
+                    {/* Category icon in colored circle */}
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base"
+                      style={{ backgroundColor: `${color}20`, color }}
+                    >
+                      <span role="img" aria-label={tx.categoryName}>
+                        {tx.categoryIcon}
+                      </span>
+                    </div>
+
+                    {/* Description + relative bar */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {tx.note || tx.categoryName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {tx.categoryName} • {formatDate(tx.date)}
+                      </p>
+                      {/* Relative size bar */}
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${relativeWidth}%`,
+                            backgroundColor: color,
+                            transitionDelay: `${index * 0.1}s`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Amount */}
+                    <p className="shrink-0 text-sm font-semibold text-red-600 dark:text-red-400">
+                      -{formatCurrency(tx.amount)}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {tx.categoryName} • {formatDate(tx.date)}
-                    </p>
-                  </div>
-
-                  {/* Amount */}
-                  <p className="shrink-0 text-sm font-semibold text-red-600 dark:text-red-400">
-                    -{formatCurrency(tx.amount)}
-                  </p>
-                </div>
-              ))}
+                  </motion.div>
+                )
+              })}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center">

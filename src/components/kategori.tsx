@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/lib/api'
+import { formatCurrency } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,7 @@ import {
 import { Plus, Pencil, Trash2, Tag, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Category {
@@ -101,13 +103,21 @@ function CategoryCard({
   category,
   onEdit,
   onDelete,
+  monthlySpent,
 }: {
   category: Category
   onEdit: (cat: Category) => void
   onDelete: (cat: Category) => void
+  monthlySpent?: number
 }) {
+  const isExpense = category.type === 'expense'
+
   return (
-    <Card className="group relative cursor-default overflow-hidden border py-0 transition-all hover:border-foreground/20 hover:shadow-md">
+    <Card className={`group relative cursor-default overflow-hidden border py-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+      isExpense
+        ? 'bg-gradient-to-br from-red-50/60 to-card hover:border-red-200 dark:from-red-950/10 dark:hover:border-red-900/40'
+        : 'bg-gradient-to-br from-emerald-50/60 to-card hover:border-emerald-200 dark:from-emerald-950/10 dark:hover:border-emerald-900/40'
+    }`}>
       <CardContent className="flex flex-col items-center gap-2 p-4">
         {/* Emoji Icon */}
         <span className="text-3xl leading-none" role="img" aria-label={category.name}>
@@ -118,6 +128,17 @@ function CategoryCard({
         <p className="max-w-full truncate text-center text-sm font-medium">
           {category.name}
         </p>
+
+        {/* Monthly spending indicator */}
+        {monthlySpent !== undefined && monthlySpent > 0 && (
+          <p className={`text-xs font-medium truncate max-w-full ${
+            isExpense
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-emerald-600 dark:text-emerald-400'
+          }`}>
+            {formatCurrency(monthlySpent)}
+          </p>
+        )}
 
         {/* Action Buttons (visible on hover) */}
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -154,6 +175,9 @@ export default function Kategori() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Spending data per category (from dashboard)
+  const [categorySpending, setCategorySpending] = useState<Record<string, number>>({})
+
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
@@ -186,6 +210,21 @@ export default function Kategori() {
   useEffect(() => {
     fetchCategories()
   }, [fetchCategories])
+
+  // Fetch spending data from dashboard
+  useEffect(() => {
+    if (categories.length > 0) {
+      api.getDashboard().then((dash) => {
+        const spending: Record<string, number> = {}
+        if (dash.topCategories && Array.isArray(dash.topCategories)) {
+          dash.topCategories.forEach((tc: { categoryId: string; totalAmount: number }) => {
+            spending[tc.categoryId] = tc.totalAmount
+          })
+        }
+        setCategorySpending(spending)
+      }).catch(() => {})
+    }
+  }, [categories])
 
   // ── Derived Data ───────────────────────────────────────────────────────
   const expenseCategories = categories.filter((c) => c.type === 'expense')
@@ -329,6 +368,44 @@ export default function Kategori() {
         </Button>
       </div>
 
+      {/* ── Summary Banner ─────────────────────────────────────────────── */}
+      {!loading && categories.length > 0 && (
+        <Card className="border-border/50 bg-gradient-to-br from-muted/30 to-card overflow-hidden">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+                    <ArrowDownLeft className="h-4 w-4 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pengeluaran</p>
+                    <p className="text-lg font-bold text-red-600 dark:text-red-400">
+                      {expenseCategories.length}
+                    </p>
+                  </div>
+                </div>
+                <div className="h-8 w-px bg-border" />
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-emerald-100 p-2 dark:bg-emerald-900/30">
+                    <ArrowUpRight className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pemasukan</p>
+                    <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                      {incomeCategories.length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-xs">
+                Total: {categories.length}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Loading State ──────────────────────────────────────────────── */}
       {loading ? (
         <div className="space-y-8">
@@ -365,6 +442,7 @@ export default function Kategori() {
                     category={cat}
                     onEdit={openEditDialog}
                     onDelete={openDeleteConfirm}
+                    monthlySpent={categorySpending[cat.id]}
                   />
                 ))}
 
@@ -404,6 +482,7 @@ export default function Kategori() {
                     category={cat}
                     onEdit={openEditDialog}
                     onDelete={openDeleteConfirm}
+                    monthlySpent={categorySpending[cat.id]}
                   />
                 ))}
 

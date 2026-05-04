@@ -40,8 +40,11 @@ import {
   ChevronRight,
   Target,
   Wallet,
+  Calendar,
+  Clock,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Category {
@@ -85,10 +88,60 @@ function getBadgeStyle(percentage: number): string {
   return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
 }
 
+// ── Circular Progress Component ────────────────────────────────────────────
+function CircularProgress({
+  percentage,
+  size = 80,
+  strokeWidth = 6,
+  colorClass = 'text-teal-500',
+}: {
+  percentage: number
+  size?: number
+  strokeWidth?: number
+  colorClass?: string
+}) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (Math.min(percentage, 100) / 100) * circumference
+
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className="stroke-muted"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className={`${colorClass} stroke-current`}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+      />
+    </svg>
+  )
+}
+
+function getOverallProgressColor(percentage: number): string {
+  if (percentage > 100) return 'text-red-500'
+  if (percentage >= 75) return 'text-amber-500'
+  return 'text-emerald-500'
+}
+
 // ── Loading Skeleton ───────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
     <div className="space-y-6">
+      {/* Summary skeleton */}
+      <Skeleton className="h-40 w-full rounded-xl" />
       {/* Month selector skeleton */}
       <div className="flex items-center justify-between">
         <Skeleton className="h-8 w-48" />
@@ -123,15 +176,21 @@ function BudgetSkeleton() {
 function BudgetCard({
   budget,
   onDelete,
+  remainingDays,
 }: {
   budget: BudgetItem
   onDelete: (budget: BudgetItem) => void
+  remainingDays: number
 }) {
   const clampedPercentage = Math.min(budget.percentage, 100)
   const isOverBudget = budget.percentage > 100
+  const remaining = budget.budgetAmount - budget.spent
+  const dailyRemaining = remainingDays > 0 && remaining > 0
+    ? Math.round(remaining / remainingDays)
+    : 0
 
   return (
-    <Card className="relative overflow-hidden transition-all hover:shadow-md">
+    <Card className="relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5">
       <CardContent className="p-4">
         {/* Header: Category info + Delete button */}
         <div className="flex items-center justify-between mb-3">
@@ -164,10 +223,10 @@ function BudgetCard({
           </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Progress Bar with animation */}
         <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${getProgressColor(budget.percentage)}`}
+            className={`h-full rounded-full progress-animate ${getProgressColor(budget.percentage)}`}
             style={{ width: `${clampedPercentage}%` }}
           />
           {isOverBudget && (
@@ -178,7 +237,7 @@ function BudgetCard({
           )}
         </div>
 
-        {/* Footer: Spent / Remaining */}
+        {/* Footer: Spent / Remaining / Daily rate */}
         <div className="mt-2 flex items-center justify-between text-xs">
           <span className={isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
             Terpakai: {formatCurrency(budget.spent)}
@@ -186,10 +245,18 @@ function BudgetCard({
           <span className={isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
             {isOverBudget
               ? `Lebih ${formatCurrency(budget.spent - budget.budgetAmount)}`
-              : `Sisa: ${formatCurrency(budget.budgetAmount - budget.spent)}`
+              : `Sisa: ${formatCurrency(remaining)}`
             }
           </span>
         </div>
+
+        {/* Daily remaining budget indicator */}
+        {!isOverBudget && remaining > 0 && remainingDays > 0 && (
+          <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>{formatCurrency(dailyRemaining)}/hari tersisa</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -269,7 +336,26 @@ export default function Budget() {
   // ── Total budget summary ────────────────────────────────────────────────
   const totalBudget = budgets.reduce((sum, b) => sum + b.budgetAmount, 0)
   const totalSpent = budgets.reduce((sum, b) => sum + b.spent, 0)
+  const totalRemaining = totalBudget - totalSpent
   const overallPercentage = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
+
+  // Animated counters
+  const animatedBudget = useAnimatedCounter(Math.round(totalBudget), 800, !loading && budgets.length > 0)
+  const animatedSpent = useAnimatedCounter(Math.round(totalSpent), 800, !loading && budgets.length > 0)
+  const animatedRemaining = useAnimatedCounter(Math.round(Math.abs(totalRemaining)), 800, !loading && budgets.length > 0)
+
+  // Remaining days in the month
+  const getRemainingDays = (): number => {
+    const now = new Date()
+    const [year, month] = currentMonth.split('-').map(Number)
+    const lastDay = new Date(year, month, 0).getDate()
+    const currentDay = now.getDate()
+    if (year === now.getFullYear() && month === now.getMonth() + 1) {
+      return Math.max(lastDay - currentDay, 0)
+    }
+    return lastDay
+  }
+  const remainingDays = getRemainingDays()
 
   // ── Dialog Handlers ─────────────────────────────────────────────────────
   const openAddDialog = () => {
@@ -413,39 +499,78 @@ export default function Budget() {
         <BudgetSkeleton />
       ) : (
         <>
-          {/* ── Summary Card ──────────────────────────────────────────────── */}
+          {/* ── Enhanced Summary Card ──────────────────────────────────────── */}
           {budgets.length > 0 && (
-            <Card className="border-teal-200 bg-teal-50/50 dark:border-teal-900/40 dark:bg-teal-950/20">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
-                    <Wallet className="h-5 w-5 text-teal-600 dark:text-teal-400" />
+            <Card className="border-teal-200 bg-gradient-to-br from-teal-50 to-emerald-50/50 dark:from-teal-950/20 dark:to-emerald-950/10 dark:border-teal-900/40">
+              <CardContent className="p-4 md:p-5">
+                <div className="flex items-center gap-5">
+                  {/* Circular progress indicator */}
+                  <div className="relative flex-shrink-0">
+                    <CircularProgress
+                      percentage={overallPercentage}
+                      size={80}
+                      strokeWidth={6}
+                      colorClass={getOverallProgressColor(overallPercentage)}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-lg font-bold text-foreground">
+                        {overallPercentage}%
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-teal-700 dark:text-teal-400">
-                      Total Anggaran Bulan Ini
-                    </p>
-                    <p className="text-xl font-bold text-teal-700 dark:text-teal-400">
-                      {formatCurrency(totalBudget)}
-                    </p>
+
+                  {/* Stats grid */}
+                  <div className="flex-1 min-w-0 grid grid-cols-3 gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-muted-foreground">Total Anggaran</p>
+                      <p className="text-base md:text-lg font-bold text-teal-700 dark:text-teal-400 truncate">
+                        {formatCurrency(animatedBudget)}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-muted-foreground">Total Terpakai</p>
+                      <p className="text-base md:text-lg font-bold text-foreground truncate">
+                        {formatCurrency(animatedSpent)}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {totalRemaining >= 0 ? 'Sisa' : 'Lebih'}
+                      </p>
+                      <p className={`text-base md:text-lg font-bold truncate ${
+                        totalRemaining >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {totalRemaining < 0 ? '-' : ''}{formatCurrency(animatedRemaining)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    Terpakai: {formatCurrency(totalSpent)}
+
+                {/* Remaining days indicator */}
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>
+                    {remainingDays > 0
+                      ? `${remainingDays} hari tersisa bulan ini`
+                      : 'Bulan ini telah berakhir'}
                   </span>
-                  <Badge className={getBadgeStyle(overallPercentage)}>
-                    {overallPercentage}%
-                  </Badge>
+                  {remainingDays > 0 && totalRemaining > 0 && (
+                    <>
+                      <span className="text-border">•</span>
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>{formatCurrency(Math.round(totalRemaining / remainingDays))}/hari tersisa</span>
+                    </>
+                  )}
                 </div>
-                <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+
+                {/* Overall progress bar */}
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${getProgressColor(overallPercentage)}`}
+                    className={`h-full rounded-full progress-animate ${getProgressColor(overallPercentage)}`}
                     style={{ width: `${Math.min(overallPercentage, 100)}%` }}
                   />
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground text-right">
-                  Sisa: {formatCurrency(totalBudget - totalSpent)}
                 </div>
               </CardContent>
             </Card>
@@ -459,6 +584,7 @@ export default function Budget() {
                   key={budget.id}
                   budget={budget}
                   onDelete={openDeleteConfirm}
+                  remainingDays={remainingDays}
                 />
               ))}
             </div>

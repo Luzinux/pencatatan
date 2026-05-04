@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate, getMonthYear, getMonthLabel } from '@/lib/format'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
+import { useAppStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +26,10 @@ import {
   Banknote,
   Smartphone,
   Building2,
+  ArrowRight,
+  Clock,
 } from 'lucide-react'
+import ReportPrint from '@/components/report-print'
 import {
   BarChart,
   Bar,
@@ -369,12 +374,39 @@ function GradientSeparator() {
   )
 }
 
+// ── Trend Indicator Component ──────────────────────────────────────────────
+function TrendIndicator({ current, previous, type }: { current: number; previous: number; type: 'expense' | 'income' }) {
+  if (previous === 0) return null
+
+  const change = ((current - previous) / previous) * 100
+  const isUp = change > 0
+  const isDown = change < 0
+
+  // For expense: increase is bad (red), decrease is good (green)
+  // For income: increase is good (green), decrease is bad (red)
+  const isPositive = type === 'income' ? isUp : isDown
+
+  if (Math.abs(change) < 0.1) return null
+
+  return (
+    <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+      {isUp ? (
+        <TrendingUp className="h-3 w-3" />
+      ) : (
+        <TrendingDown className="h-3 w-3" />
+      )}
+      <span>{Math.abs(change).toFixed(0)}%</span>
+    </div>
+  )
+}
+
 // ── Main Dashboard Component ───────────────────────────────────────────────
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(getMonthYear())
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const setCurrentPage = useAppStore((s) => s.setCurrentPage)
 
   const fetchData = useCallback(async (month: string) => {
     setLoading(true)
@@ -409,6 +441,25 @@ export default function Dashboard() {
     setCurrentMonth(getMonthYear())
   }
 
+  // ── Animated counters ──────────────────────────────────────────────────
+  const animatedExpense = useAnimatedCounter(data?.totalExpense ?? 0, 1000, !!data)
+  const animatedIncome = useAnimatedCounter(data?.totalIncome ?? 0, 1000, !!data)
+  const animatedBalance = useAnimatedCounter(data?.balance ?? 0, 1000, !!data)
+  const animatedDailyAvg = useAnimatedCounter(data?.dailyAverageExpense ?? 0, 800, !!data)
+  const animatedTxCount = useAnimatedCounter(data?.transactionCount ?? 0, 600, !!data)
+
+  // ── Previous month trend for comparison ─────────────────────────────────
+  const prevMonthTrend = useMemo(() => {
+    if (!data?.monthlyTrend || data.monthlyTrend.length < 2) return null
+    // Last item is current month, second-to-last is previous
+    return data.monthlyTrend[data.monthlyTrend.length - 2]
+  }, [data?.monthlyTrend])
+
+  const currentMonthTrend = useMemo(() => {
+    if (!data?.monthlyTrend || data.monthlyTrend.length < 1) return null
+    return data.monthlyTrend[data.monthlyTrend.length - 1]
+  }, [data?.monthlyTrend])
+
   // Prepare bar chart data
   const barChartData =
     data?.monthlyTrend.map((item) => ({
@@ -426,6 +477,15 @@ export default function Dashboard() {
       })) ?? []
 
   const isCurrentMonth = currentMonth === getMonthYear()
+
+  // Timestamp for "last updated"
+  const lastUpdated = useMemo(() => {
+    const now = new Date()
+    return new Intl.DateTimeFormat('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(now)
+  }, [data])
 
   // ── Render ─────────────────────────────────────────────────────────────
   if (loading) return <DashboardSkeleton />
@@ -465,8 +525,8 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* ── Month Selector (Pill) ─────────────────────────────────────── */}
-      <div className="flex items-center justify-center">
+      {/* ── Month Selector (Pill) + Print Button ──────────────────────── */}
+      <div className="flex items-center justify-center gap-2">
         <div className="flex items-center gap-1 rounded-full border bg-muted/50 px-1 py-1">
           <Button
             variant="ghost"
@@ -495,12 +555,15 @@ export default function Dashboard() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
+        <ReportPrint currentMonth={currentMonth} />
       </div>
 
-      {/* ── Summary Cards ──────────────────────────────────────────────── */}
+      {/* ── Summary Cards with Trend Indicators ─────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Pengeluaran */}
         <Card className="relative overflow-hidden border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-red-900/40 dark:from-red-950/20 dark:to-card">
+          {/* Decorative ring behind amount */}
+          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-red-100/40 dark:border-red-900/20" />
           <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
             <ArrowDownLeft className="h-5 w-5 text-red-500" />
           </div>
@@ -511,13 +574,24 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400">
-              {formatCurrency(data.totalExpense)}
+              {formatCurrency(animatedExpense)}
             </p>
+            {prevMonthTrend && currentMonthTrend && (
+              <div className="mt-1.5">
+                <TrendIndicator
+                  current={currentMonthTrend.expense}
+                  previous={prevMonthTrend.expense}
+                  type="expense"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Total Pemasukan */}
         <Card className="relative overflow-hidden border-green-200 bg-gradient-to-br from-green-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-green-900/40 dark:from-green-950/20 dark:to-card">
+          {/* Decorative ring behind amount */}
+          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-green-100/40 dark:border-green-900/20" />
           <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
             <ArrowUpRight className="h-5 w-5 text-green-500" />
           </div>
@@ -528,13 +602,24 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400">
-              {formatCurrency(data.totalIncome)}
+              {formatCurrency(animatedIncome)}
             </p>
+            {prevMonthTrend && currentMonthTrend && (
+              <div className="mt-1.5">
+                <TrendIndicator
+                  current={currentMonthTrend.income}
+                  previous={prevMonthTrend.income}
+                  type="income"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Sisa Uang */}
         <Card className="relative overflow-hidden border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-teal-900/40 dark:from-teal-950/20 dark:to-card">
+          {/* Decorative ring behind amount */}
+          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-teal-100/40 dark:border-teal-900/20" />
           <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
             <Wallet className="h-5 w-5 text-teal-500" />
           </div>
@@ -551,8 +636,17 @@ export default function Dashboard() {
                   : 'text-red-600 dark:text-red-400'
               }`}
             >
-              {formatCurrency(data.balance)}
+              {formatCurrency(animatedBalance)}
             </p>
+            {prevMonthTrend && currentMonthTrend && (
+              <div className="mt-1.5">
+                <TrendIndicator
+                  current={currentMonthTrend.income - currentMonthTrend.expense}
+                  previous={prevMonthTrend.income - prevMonthTrend.expense}
+                  type="income"
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -603,7 +697,7 @@ export default function Dashboard() {
                 Rata-rata Harian
               </p>
               <p className="text-xl font-bold text-sky-600 dark:text-sky-400">
-                {formatCurrency(data.dailyAverageExpense)}
+                {formatCurrency(animatedDailyAvg)}
               </p>
               <p className="text-xs text-muted-foreground">per hari</p>
             </div>
@@ -621,7 +715,7 @@ export default function Dashboard() {
                 Jumlah Transaksi
               </p>
               <p className="text-xl font-bold text-violet-600 dark:text-violet-400">
-                {data.transactionCount}
+                {animatedTxCount}
               </p>
               <p className="text-xs text-muted-foreground">transaksi bulan ini</p>
             </div>
@@ -694,59 +788,79 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* ── Charts Section ─────────────────────────────────────────────── */}
+      {/* ── Charts Section with Enhanced Design ─────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Bar Chart - Monthly Trend */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <Card className="relative overflow-hidden">
+          {/* Top accent line */}
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 via-amber-500 to-green-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/30">
+                <TrendingUp className="h-4 w-4 text-red-600 dark:text-red-400" />
+              </div>
               Tren 6 Bulan
             </CardTitle>
           </CardHeader>
           <CardContent>
             {hasTrendData ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={barChartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis
-                    dataKey="month"
-                    tickFormatter={(v: string) => {
-                      const parts = v.split('-')
-                      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-                      return months[parseInt(parts[1]) - 1]
+              <>
+                {/* Subtle grid pattern background */}
+                <div className="relative rounded-lg border bg-muted/20 p-2 dark:bg-muted/10">
+                  <div
+                    className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+                    style={{
+                      backgroundImage: 'linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)',
+                      backgroundSize: '24px 24px',
                     }}
-                    tick={{ fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
                   />
-                  <YAxis
-                    tickFormatter={(v: number) => {
-                      if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(0)}jt`
-                      if (v >= 1_000) return `${(v / 1_000).toFixed(0)}rb`
-                      return `${v}`
-                    }}
-                    tick={{ fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<BarChartTooltip />} />
-                  <Bar
-                    dataKey="expense"
-                    name="Pengeluaran"
-                    fill={EXPENSE_COLOR}
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={40}
-                  />
-                  <Bar
-                    dataKey="income"
-                    name="Pemasukan"
-                    fill={INCOME_COLOR}
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={40}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={barChartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis
+                        dataKey="month"
+                        tickFormatter={(v: string) => {
+                          const parts = v.split('-')
+                          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+                          return months[parseInt(parts[1]) - 1]
+                        }}
+                        tick={{ fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(v: number) => {
+                          if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(0)}jt`
+                          if (v >= 1_000) return `${(v / 1_000).toFixed(0)}rb`
+                          return `${v}`
+                        }}
+                        tick={{ fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <Tooltip content={<BarChartTooltip />} />
+                      <Bar
+                        dataKey="expense"
+                        name="Pengeluaran"
+                        fill={EXPENSE_COLOR}
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={40}
+                      />
+                      <Bar
+                        dataKey="income"
+                        name="Pemasukan"
+                        fill={INCOME_COLOR}
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={40}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>Diperbarui {lastUpdated}</span>
+                </div>
+              </>
             ) : (
               <EmptyState message="Belum ada data tren bulanan" />
             )}
@@ -754,38 +868,58 @@ export default function Dashboard() {
         </Card>
 
         {/* Pie Chart - Top Categories */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+        <Card className="relative overflow-hidden">
+          {/* Top accent line */}
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-pink-500 to-orange-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                <CircleDollarSign className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              </div>
               Kategori Terbesar
             </CardTitle>
           </CardHeader>
           <CardContent>
             {hasCategories ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={pieChartData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {pieChartData.map((_, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={PIE_COLORS[index % PIE_COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<PieChartTooltip />} />
-                  <Legend content={<PieLegend />} />
-                </PieChart>
-              </ResponsiveContainer>
+              <>
+                {/* Subtle grid pattern background */}
+                <div className="relative rounded-lg border bg-muted/20 p-2 dark:bg-muted/10">
+                  <div
+                    className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+                    style={{
+                      backgroundImage: 'linear-gradient(currentColor 1px, transparent 1px), linear-gradient(90deg, currentColor 1px, transparent 1px)',
+                      backgroundSize: '24px 24px',
+                    }}
+                  />
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie
+                        data={pieChartData}
+                        cx="50%"
+                        cy="45%"
+                        innerRadius={55}
+                        outerRadius={90}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {pieChartData.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<PieChartTooltip />} />
+                      <Legend content={<PieLegend />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />
+                  <span>Diperbarui {lastUpdated}</span>
+                </div>
+              </>
             ) : (
               <EmptyState message="Belum ada data kategori pengeluaran" />
             )}
@@ -797,10 +931,14 @@ export default function Dashboard() {
 
       {/* ── Payment Method Breakdown ────────────────────────────────────── */}
       {hasPaymentMethodData && (
-        <Card>
+        <Card className="relative overflow-hidden">
+          {/* Top accent line */}
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-green-500 via-purple-500 to-sky-500" />
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Wallet className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/30">
+                <Wallet className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+              </div>
               Pengeluaran per Metode
             </CardTitle>
           </CardHeader>
@@ -847,60 +985,87 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* ── Budget Progress ───────────────────────────────────────────── */}
+      {/* ── Budget Progress - Enhanced ─────────────────────────────────── */}
       {data.budgetProgress && data.budgetProgress.length > 0 && (
-        <Card>
+        <Card className="relative overflow-hidden">
+          {/* Top accent line */}
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" />
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Target className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                <Target className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
               Anggaran Bulan Ini
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {data.budgetProgress.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-lg border p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg" role="img" aria-label={item.categoryName}>
-                        {item.categoryIcon}
-                      </span>
-                      <span className="text-sm font-medium">{item.categoryName}</span>
+              {data.budgetProgress.map((item) => {
+                const remaining = item.budgetAmount - item.spent
+                const isOverBudget = remaining < 0
+
+                const progressColor =
+                  item.percentage > 100
+                    ? 'bg-red-500'
+                    : item.percentage >= 75
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+
+                const badgeClass =
+                  item.percentage > 100
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    : item.percentage >= 75
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border p-4 space-y-3 transition-colors hover:bg-muted/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`flex h-9 w-9 items-center justify-center rounded-full ${
+                          item.percentage > 100
+                            ? 'bg-red-100 dark:bg-red-900/30'
+                            : item.percentage >= 75
+                              ? 'bg-amber-100 dark:bg-amber-900/30'
+                              : 'bg-emerald-100 dark:bg-emerald-900/30'
+                        }`}>
+                          <span className="text-base" role="img" aria-label={item.categoryName}>
+                            {item.categoryIcon}
+                          </span>
+                        </div>
+                        <span className="text-sm font-medium">{item.categoryName}</span>
+                      </div>
+                      <Badge variant="secondary" className={badgeClass}>
+                        {item.percentage.toFixed(0)}%
+                      </Badge>
                     </div>
-                    <Badge
-                      variant="secondary"
-                      className={
-                        item.percentage > 100
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : item.percentage >= 75
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                      }
-                    >
-                      {item.percentage.toFixed(0)}%
-                    </Badge>
+                    {/* Thicker progress bar with animation */}
+                    <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-1000 ease-out ${progressColor}`}
+                        style={{ width: `${Math.min(item.percentage, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Terpakai: <span className="font-medium text-foreground">{formatCurrency(item.spent)}</span>
+                      </span>
+                      <span className={isOverBudget ? 'font-medium text-red-600 dark:text-red-400' : 'font-medium text-emerald-600 dark:text-emerald-400'}>
+                        {isOverBudget
+                          ? `Lebih: ${formatCurrency(Math.abs(remaining))}`
+                          : `Sisa: ${formatCurrency(remaining)}`
+                        }
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Anggaran: {formatCurrency(item.budgetAmount)}
+                    </div>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        item.percentage > 100
-                          ? 'bg-red-500'
-                          : item.percentage >= 75
-                            ? 'bg-amber-500'
-                            : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${Math.min(item.percentage, 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Terpakai: {formatCurrency(item.spent)}</span>
-                    <span>Anggaran: {formatCurrency(item.budgetAmount)}</span>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </CardContent>
         </Card>
@@ -908,15 +1073,28 @@ export default function Dashboard() {
 
       <GradientSeparator />
 
-      {/* ── Recent Transactions ────────────────────────────────────────── */}
+      {/* ── Recent Transactions - Enhanced ────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Transaksi Terbaru</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Transaksi Terbaru</CardTitle>
+            {hasTransactions && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setCurrentPage('history')}
+              >
+                Lihat Semua
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {hasTransactions ? (
-            <div className="space-y-1">
-              {data.recentTransactions.map((tx) => {
+            <div className="space-y-0">
+              {data.recentTransactions.map((tx, index) => {
                 const isExpense = tx.type === 'expense'
                 const isIncome = tx.type === 'income'
                 const isTransfer = tx.type === 'transfer'
@@ -933,13 +1111,31 @@ export default function Dashboard() {
 
                 const amountPrefix = isExpense ? '-' : isIncome ? '+' : ''
 
+                // Left border color for type indicator
+                const leftBorderColor = isExpense
+                  ? 'border-l-red-500'
+                  : isIncome
+                    ? 'border-l-emerald-500'
+                    : 'border-l-sky-500'
+
+                // Alternating row backgrounds
+                const rowBg = index % 2 === 1
+                  ? 'bg-muted/20 dark:bg-muted/10'
+                  : ''
+
                 return (
                   <div
                     key={tx.id}
-                    className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/50"
+                    className={`flex items-center gap-3 rounded-lg border-l-[3px] ${leftBorderColor} px-2 py-3 transition-colors hover:bg-muted/50 ${rowBg}`}
                   >
                     {/* Icon */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-lg">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg ${
+                      isExpense
+                        ? 'bg-red-100 dark:bg-red-950/40'
+                        : isIncome
+                          ? 'bg-emerald-100 dark:bg-emerald-950/40'
+                          : 'bg-sky-100 dark:bg-sky-950/40'
+                    }`}>
                       <span role="img" aria-label={tx.category?.name ?? 'Transaksi'}>
                         {icon}
                       </span>

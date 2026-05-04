@@ -42,6 +42,7 @@ import {
   Building2,
   Loader2,
   Wallet,
+  TrendingDown,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -67,6 +68,8 @@ const TYPE_CONFIG: Record<
     iconBgClass: string
     iconTextClass: string
     cardBorderClass: string
+    cardBgClass: string
+    patternColor: string
   }
 > = {
   cash: {
@@ -77,6 +80,8 @@ const TYPE_CONFIG: Record<
     iconBgClass: 'bg-green-100 dark:bg-green-900/30',
     iconTextClass: 'text-green-600 dark:text-green-400',
     cardBorderClass: 'border-green-200 dark:border-green-900/40',
+    cardBgClass: 'bg-gradient-to-br from-green-50/80 via-emerald-50/30 to-card dark:from-green-950/20 dark:via-emerald-950/5 dark:to-card',
+    patternColor: 'bg-green-200/20 dark:bg-green-800/10',
   },
   ewallet: {
     label: 'E-Wallet',
@@ -86,6 +91,8 @@ const TYPE_CONFIG: Record<
     iconBgClass: 'bg-purple-100 dark:bg-purple-900/30',
     iconTextClass: 'text-purple-600 dark:text-purple-400',
     cardBorderClass: 'border-purple-200 dark:border-purple-900/40',
+    cardBgClass: 'bg-gradient-to-br from-purple-50/80 via-violet-50/30 to-card dark:from-purple-950/20 dark:via-violet-950/5 dark:to-card',
+    patternColor: 'bg-purple-200/20 dark:bg-purple-800/10',
   },
   bank: {
     label: 'Bank',
@@ -95,6 +102,8 @@ const TYPE_CONFIG: Record<
     iconBgClass: 'bg-sky-100 dark:bg-sky-900/30',
     iconTextClass: 'text-sky-600 dark:text-sky-400',
     cardBorderClass: 'border-sky-200 dark:border-sky-900/40',
+    cardBgClass: 'bg-gradient-to-br from-sky-50/80 via-blue-50/30 to-card dark:from-sky-950/20 dark:via-blue-950/5 dark:to-card',
+    patternColor: 'bg-sky-200/20 dark:bg-sky-800/10',
   },
 }
 
@@ -107,6 +116,8 @@ function MetodeSkeleton() {
         <Skeleton className="h-7 w-44" />
         <Skeleton className="h-10 w-36" />
       </div>
+      {/* Summary skeleton */}
+      <Skeleton className="h-20 w-full rounded-xl" />
       {/* Cards skeleton */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
@@ -163,6 +174,9 @@ export default function Metode() {
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Spending data per payment method (from dashboard)
+  const [methodSpending, setMethodSpending] = useState<Record<string, number>>({})
+
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -195,6 +209,26 @@ export default function Metode() {
   useEffect(() => {
     fetchMethods()
   }, [fetchMethods])
+
+  // Fetch spending data from dashboard
+  useEffect(() => {
+    if (methods.length > 0) {
+      api.getDashboard().then((dash) => {
+        const spending: Record<string, number> = {}
+        if (dash.paymentMethodBreakdown && Array.isArray(dash.paymentMethodBreakdown)) {
+          dash.paymentMethodBreakdown.forEach((pm: { paymentMethodId: string; totalAmount: number }) => {
+            spending[pm.paymentMethodId] = pm.totalAmount
+          })
+        }
+        setMethodSpending(spending)
+      }).catch(() => {})
+    }
+  }, [methods])
+
+  // Summary counts by type
+  const cashCount = methods.filter((m) => m.type === 'cash').length
+  const ewalletCount = methods.filter((m) => m.type === 'ewallet').length
+  const bankCount = methods.filter((m) => m.type === 'bank').length
 
   // Open dialog for adding
   const openAddDialog = () => {
@@ -304,6 +338,64 @@ export default function Metode() {
         </Button>
       </div>
 
+      {/* ── Summary Banner ─────────────────────────────────────────────── */}
+      {methods.length > 0 && (
+        <Card className="border-border/50 bg-gradient-to-br from-muted/30 to-card overflow-hidden">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* Cash count */}
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-green-100 p-2 dark:bg-green-900/30">
+                    <Banknote className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tunai</p>
+                    <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                      {cashCount}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-8 w-px bg-border" />
+
+                {/* E-Wallet count */}
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-purple-100 p-2 dark:bg-purple-900/30">
+                    <Smartphone className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">E-Wallet</p>
+                    <p className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                      {ewalletCount}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-8 w-px bg-border" />
+
+                {/* Bank count */}
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-sky-100 p-2 dark:bg-sky-900/30">
+                    <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Bank</p>
+                    <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
+                      {bankCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Badge variant="secondary" className="text-xs">
+                Total: {methods.length}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Payment Method Cards ───────────────────────────────────────── */}
       {methods.length === 0 ? (
         <EmptyState onAdd={openAddDialog} />
@@ -311,12 +403,24 @@ export default function Metode() {
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           {methods.map((method) => {
             const config = TYPE_CONFIG[(method.type as PaymentMethodType) ?? 'cash']
+            const monthlySpent = methodSpending[method.id]
+
             return (
               <Card
                 key={method.id}
-                className={`relative overflow-hidden transition-shadow hover:shadow-md ${config.cardBorderClass}`}
+                className={`relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${config.cardBorderClass} ${config.cardBgClass}`}
               >
-                <CardContent className="p-4">
+                {/* Subtle border pattern overlay */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-50">
+                  <div
+                    className={`absolute -right-4 -top-4 h-16 w-16 rounded-full ${config.patternColor}`}
+                  />
+                  <div
+                    className={`absolute -left-2 -bottom-2 h-12 w-12 rounded-full ${config.patternColor}`}
+                  />
+                </div>
+
+                <CardContent className="p-4 relative">
                   {/* Icon, Name, Badge */}
                   <div className="flex items-start gap-3">
                     <div
@@ -344,6 +448,16 @@ export default function Metode() {
                       {formatCurrency(method.initialBalance ?? 0)}
                     </p>
                   </div>
+
+                  {/* Monthly spending indicator */}
+                  {monthlySpent !== undefined && monthlySpent > 0 && (
+                    <div className="mt-2 flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">
+                        Bulan ini: <span className="font-medium text-foreground">{formatCurrency(monthlySpent)}</span>
+                      </p>
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="mt-3 flex items-center justify-end gap-1">

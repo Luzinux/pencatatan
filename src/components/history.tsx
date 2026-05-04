@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { useAppStore } from '@/lib/store'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -59,7 +60,10 @@ import {
   CalendarDays,
   ChevronDown,
   ArrowRight,
+  RotateCcw,
+  ChevronLeft,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/hooks/use-toast'
 
 interface Category {
@@ -302,6 +306,11 @@ function NoResultsState({ onClear }: { onClear: () => void }) {
   )
 }
 
+function AnimatedStatValue({ amount, format }: { amount: number; format: (v: number) => string }) {
+  const animated = useAnimatedCounter(amount, 800, amount > 0)
+  return <span>{format(animated)}</span>
+}
+
 function SummaryStats({ transactions }: { transactions: Transaction[] }) {
   const totalExpense = transactions
     .filter((t) => t.type === 'expense')
@@ -353,11 +362,14 @@ function SummaryStats({ transactions }: { transactions: Transaction[] }) {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {stats.map((stat) => {
+      {stats.map((stat, index) => {
         const Icon = stat.icon
         return (
-          <div
+          <motion.div
             key={stat.label}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: index * 0.08 }}
             className={`rounded-xl p-3 sm:p-4 ${stat.bg} border border-border/30 transition-all duration-200 hover:shadow-sm`}
           >
             <div className="flex items-center gap-2 mb-2">
@@ -369,9 +381,9 @@ function SummaryStats({ transactions }: { transactions: Transaction[] }) {
               </span>
             </div>
             <div className={`text-sm sm:text-base font-bold ${stat.color} leading-tight`}>
-              {stat.format(stat.amount)}
+              <AnimatedStatValue amount={stat.amount} format={stat.format} />
             </div>
-          </div>
+          </motion.div>
         )
       })}
     </div>
@@ -427,22 +439,192 @@ function ActiveFilterPills({
 
   return (
     <div className="flex flex-wrap gap-1.5 mt-2">
-      {pills.map((pill) => (
-        <Badge
-          key={pill.label}
-          variant="secondary"
-          className="gap-1 pr-1 text-xs font-normal"
-        >
-          {pill.label}
-          <button
-            onClick={pill.onRemove}
-            className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 transition-colors"
+      <AnimatePresence mode="popLayout">
+        {pills.map((pill) => (
+          <motion.div
+            key={pill.label}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.15 }}
           >
-            <X className="h-3 w-3" />
-          </button>
-        </Badge>
-      ))}
+            <Badge
+              variant="secondary"
+              className="gap-1 pr-1 text-xs font-normal shadow-sm bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/30"
+            >
+              {pill.label}
+              <button
+                onClick={pill.onRemove}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-emerald-200/50 dark:hover:bg-emerald-800/40 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
+  )
+}
+
+// Swipe-to-delete transaction item
+function SwipeableTransactionItem({
+  tx,
+  onEdit,
+  onDelete,
+  index,
+  showSwipeHint,
+}: {
+  tx: Transaction
+  onEdit: () => void
+  onDelete: () => void
+  index: number
+  showSwipeHint: boolean
+}) {
+  const typeColor = TYPE_COLORS[tx.type as keyof typeof TYPE_COLORS] || 'text-foreground'
+  const typeBgCircle = TYPE_BG_CIRCLE[tx.type as keyof typeof TYPE_BG_CIRCLE] || 'bg-muted'
+  const typeBorderLeft = TYPE_BORDER_LEFT[tx.type as keyof typeof TYPE_BORDER_LEFT] || ''
+  const sourceColor = SOURCE_COLORS[tx.source] || ''
+  const sourceLabel = SOURCE_LABELS[tx.source] || tx.source
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.03 }}
+      className="relative overflow-hidden"
+    >
+      {/* Delete button behind the item */}
+      <div className="absolute inset-y-0 right-0 flex items-center justify-center w-20 bg-red-500 dark:bg-red-600">
+        <button
+          onClick={onDelete}
+          className="flex flex-col items-center justify-center h-full w-full text-white hover:bg-red-600 dark:hover:bg-red-700 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+          <span className="text-[10px] mt-0.5">Hapus</span>
+        </button>
+      </div>
+
+      {/* Draggable transaction item */}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -100, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={(_, info) => {
+          // Snap back if not swiped far enough
+          if (info.offset.x > -80) {
+            // The dragConstraints will snap it back
+          }
+        }}
+        className={`relative flex items-center gap-3 px-4 py-3 border-l-[3px] ${typeBorderLeft} hover:bg-muted/30 transition-colors duration-150 cursor-default bg-card touch-pan-y`}
+      >
+        {/* Swipe hint */}
+        <AnimatePresence>
+          {showSwipeHint && (
+            <motion.div
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className="absolute top-1 right-2 flex items-center gap-1 text-[9px] text-muted-foreground/50 pointer-events-none"
+            >
+              <span>Geser untuk hapus</span>
+              <ChevronLeft className="h-3 w-3" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Category icon in colored circle */}
+        <div className={`flex items-center justify-center h-10 w-10 rounded-full ${typeBgCircle} shrink-0 text-lg`}>
+          {tx.type === 'transfer'
+            ? '🔄'
+            : tx.category?.icon || '📝'}
+        </div>
+
+        {/* Details */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground truncate">
+              {tx.type === 'transfer'
+                ? 'Transfer'
+                : tx.category?.name || 'Tanpa Kategori'}
+            </span>
+            {/* For transfer: show arrow between payment methods */}
+            {tx.type === 'transfer' && tx.paymentMethod && tx.toPaymentMethod ? (
+              <div className="flex items-center gap-1 shrink-0">
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 font-normal"
+                >
+                  {tx.paymentMethod.name}
+                </Badge>
+                <ArrowRight className="h-3 w-3 text-sky-500 shrink-0" />
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 font-normal"
+                >
+                  {tx.toPaymentMethod.name}
+                </Badge>
+              </div>
+            ) : (
+              tx.paymentMethod && (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0"
+                >
+                  {tx.paymentMethod.name}
+                </Badge>
+              )
+            )}
+            {tx.source !== 'manual' && (
+              <Badge
+                className={`text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 border-0 ${sourceColor}`}
+              >
+                {sourceLabel}
+              </Badge>
+            )}
+          </div>
+          {tx.note && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-xs text-muted-foreground truncate">
+                {tx.note}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Amount & actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className={`text-sm font-semibold ${typeColor}`}>
+              {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
+              {formatCurrency(tx.amount)}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              {new Intl.DateTimeFormat('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit',
+              }).format(new Date(tx.date))}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={onEdit}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0 md:hidden"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -459,6 +641,7 @@ export default function History() {
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [filterOpen, setFilterOpen] = useState(true)
+  const [showSwipeHint, setShowSwipeHint] = useState(true)
 
   // Edit state
   const [editTarget, setEditTarget] = useState<Transaction | null>(null)
@@ -470,6 +653,12 @@ export default function History() {
   const [editNote, setEditNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+
+  // Hide swipe hint after 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSwipeHint(false), 3000)
+    return () => clearTimeout(timer)
+  }, [loading])
 
   const hasActiveFilters =
     search !== '' || typeFilter !== 'all' || monthFilter !== '' || categoryFilter !== 'all'
@@ -627,9 +816,9 @@ export default function History() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter Bar - Collapsible */}
+      {/* Filter Bar - Collapsible with AnimatePresence */}
       <Collapsible open={filterOpen} onOpenChange={setFilterOpen}>
-        <Card>
+        <Card className={`transition-all duration-300 ${hasActiveFilters ? 'border-l-4 border-l-emerald-500' : ''}`}>
           <CardContent className="p-4 space-y-0">
             <CollapsibleTrigger asChild>
               <div className="flex items-center gap-2 cursor-pointer select-none">
@@ -666,10 +855,10 @@ export default function History() {
                         e.stopPropagation()
                         clearFilters()
                       }}
-                      className="h-7 text-xs gap-1 px-2"
+                      className="h-7 text-xs gap-1 px-2 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
                     >
-                      <X className="h-3 w-3" />
-                      Hapus Filter
+                      <RotateCcw className="h-3 w-3" />
+                      Reset Filter
                     </Button>
                   )}
                   <ChevronDown
@@ -681,74 +870,84 @@ export default function History() {
               </div>
             </CollapsibleTrigger>
 
-            <CollapsibleContent>
-              <div className="space-y-3 pt-3">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Cari catatan transaksi..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9 h-9 ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary/50 transition-shadow"
-                  />
-                </div>
+            <AnimatePresence initial={false}>
+              {filterOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-3 pt-3">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Cari catatan transaksi..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 h-9 ring-primary/30 focus-visible:ring-2 focus-visible:ring-primary/50 transition-shadow"
+                      />
+                    </div>
 
-                {/* Filters row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {/* Type filter */}
-                  <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Tipe" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TYPE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {/* Filters row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Type filter */}
+                      <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Tipe" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TYPE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-                  {/* Month filter */}
-                  <Input
-                    type="month"
-                    value={monthFilter}
-                    onChange={(e) => setMonthFilter(e.target.value)}
-                    placeholder="Bulan"
-                    className="h-9"
-                  />
+                      {/* Month filter */}
+                      <Input
+                        type="month"
+                        value={monthFilter}
+                        onChange={(e) => setMonthFilter(e.target.value)}
+                        placeholder="Bulan"
+                        className="h-9"
+                      />
 
-                  {/* Category filter */}
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Kategori" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Semua Kategori</SelectItem>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                      {/* Category filter */}
+                      <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Kategori" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Semua Kategori</SelectItem>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.icon} {cat.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {/* Active filter pills */}
-                <ActiveFilterPills
-                  search={search}
-                  typeFilter={typeFilter}
-                  monthFilter={monthFilter}
-                  categoryFilter={categoryFilter}
-                  categories={categories}
-                  onRemoveSearch={() => setSearch('')}
-                  onRemoveType={() => setTypeFilter('all')}
-                  onRemoveMonth={() => setMonthFilter('')}
-                  onRemoveCategory={() => setCategoryFilter('all')}
-                />
-              </div>
-            </CollapsibleContent>
+                    {/* Active filter pills */}
+                    <ActiveFilterPills
+                      search={search}
+                      typeFilter={typeFilter}
+                      monthFilter={monthFilter}
+                      categoryFilter={categoryFilter}
+                      categories={categories}
+                      onRemoveSearch={() => setSearch('')}
+                      onRemoveType={() => setTypeFilter('all')}
+                      onRemoveMonth={() => setMonthFilter('')}
+                      onRemoveCategory={() => setCategoryFilter('all')}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </CardContent>
         </Card>
       </Collapsible>
@@ -777,7 +976,7 @@ export default function History() {
 
           <ScrollArea className="max-h-[60vh] [&>div]:scrollbar-thin [&>div]:scrollbar-thumb-muted-foreground/20 [&>div]:scrollbar-track-transparent">
             <div className="space-y-3 pr-1">
-              {grouped.map((group) => {
+              {grouped.map((group, groupIndex) => {
                 const dayExpense = group.transactions
                   .filter((t) => t.type === 'expense')
                   .reduce((s, t) => s + t.amount, 0)
@@ -786,149 +985,64 @@ export default function History() {
                   .reduce((s, t) => s + t.amount, 0)
 
                 return (
-                  <Card key={group.date} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      {/* Date header - Enhanced */}
-                      <div className="sticky top-0 z-10 bg-card px-4 pt-3 pb-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <h3 className="text-sm font-semibold text-foreground">
-                              {group.label}
-                            </h3>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {formatDate(group.date)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1">
-                          {dayExpense > 0 && (
-                            <span className="text-xs text-red-600 dark:text-red-400 font-medium">
-                              -{formatCurrency(dayExpense)}
-                            </span>
-                          )}
-                          {dayIncome > 0 && (
-                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                              +{formatCurrency(dayIncome)}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground">
-                            {group.transactions.length} transaksi
-                          </span>
-                        </div>
-                        <Separator className="mt-2" />
-                      </div>
-
-                      {/* Transaction items */}
-                      <div className="divide-y divide-border/30">
-                        {group.transactions.map((tx) => {
-                          const typeColor = TYPE_COLORS[tx.type as keyof typeof TYPE_COLORS] || 'text-foreground'
-                          const typeBgCircle = TYPE_BG_CIRCLE[tx.type as keyof typeof TYPE_BG_CIRCLE] || 'bg-muted'
-                          const typeBorderLeft = TYPE_BORDER_LEFT[tx.type as keyof typeof TYPE_BORDER_LEFT] || ''
-                          const sourceColor = SOURCE_COLORS[tx.source] || ''
-                          const sourceLabel = SOURCE_LABELS[tx.source] || tx.source
-
-                          return (
-                            <div
-                              key={tx.id}
-                              className={`flex items-center gap-3 px-4 py-3 border-l-[3px] ${typeBorderLeft} hover:bg-muted/30 transition-colors duration-150 cursor-default`}
-                            >
-                              {/* Category icon in colored circle */}
-                              <div className={`flex items-center justify-center h-10 w-10 rounded-full ${typeBgCircle} shrink-0 text-lg`}>
-                                {tx.type === 'transfer'
-                                  ? '🔄'
-                                  : tx.category?.icon || '📝'}
-                              </div>
-
-                              {/* Details */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm font-medium text-foreground truncate">
-                                    {tx.type === 'transfer'
-                                      ? 'Transfer'
-                                      : tx.category?.name || 'Tanpa Kategori'}
-                                  </span>
-                                  {/* For transfer: show arrow between payment methods */}
-                                  {tx.type === 'transfer' && tx.paymentMethod && tx.toPaymentMethod ? (
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[10px] px-1.5 py-0 h-4 font-normal"
-                                      >
-                                        {tx.paymentMethod.name}
-                                      </Badge>
-                                      <ArrowRight className="h-3 w-3 text-sky-500 shrink-0" />
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[10px] px-1.5 py-0 h-4 font-normal"
-                                      >
-                                        {tx.toPaymentMethod.name}
-                                      </Badge>
-                                    </div>
-                                  ) : (
-                                    tx.paymentMethod && (
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[10px] px-1.5 py-0 h-4 font-normal shrink-0"
-                                      >
-                                        {tx.paymentMethod.name}
-                                      </Badge>
-                                    )
-                                  )}
-                                  {tx.source !== 'manual' && (
-                                    <Badge
-                                      className={`text-[10px] px-1.5 py-0 h-4 font-normal shrink-0 border-0 ${sourceColor}`}
-                                    >
-                                      {sourceLabel}
-                                    </Badge>
-                                  )}
-                                </div>
-                                {tx.note && (
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="text-xs text-muted-foreground truncate">
-                                      {tx.note}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Amount & actions */}
-                              <div className="flex items-center gap-2 shrink-0">
-                                <div className="text-right">
-                                  <div className={`text-sm font-semibold ${typeColor}`}>
-                                    {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}
-                                    {formatCurrency(tx.amount)}
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground">
-                                    {new Intl.DateTimeFormat('id-ID', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    }).format(new Date(tx.date))}
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
-                                  onClick={() => handleOpenEdit(tx)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-red-600 shrink-0"
-                                  onClick={() => setDeleteTarget(tx)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
+                  <motion.div
+                    key={group.date}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: groupIndex * 0.06 }}
+                  >
+                    <Card className="overflow-hidden">
+                      <CardContent className="p-0">
+                        {/* Date header - Enhanced */}
+                        <div className="sticky top-0 z-10 bg-card px-4 pt-3 pb-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <h3 className="text-sm font-semibold text-foreground">
+                                {group.label}
+                              </h3>
                             </div>
-                          )
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(group.date)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            {dayExpense > 0 && (
+                              <span className="text-xs text-red-600 dark:text-red-400 font-medium">
+                                -{formatCurrency(dayExpense)}
+                              </span>
+                            )}
+                            {dayIncome > 0 && (
+                              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                +{formatCurrency(dayIncome)}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">
+                              {group.transactions.length} transaksi
+                            </span>
+                          </div>
+                          <Separator className="mt-2" />
+                        </div>
+
+                        {/* Transaction items */}
+                        <div className="divide-y divide-border/30">
+                          {group.transactions.map((tx, txIndex) => {
+                            const globalIndex = groupIndex * 10 + txIndex
+                            return (
+                              <SwipeableTransactionItem
+                                key={tx.id}
+                                tx={tx}
+                                onEdit={() => handleOpenEdit(tx)}
+                                onDelete={() => setDeleteTarget(tx)}
+                                index={txIndex}
+                                showSwipeHint={showSwipeHint && groupIndex === 0 && txIndex === 0}
+                              />
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 )
               })}
             </div>

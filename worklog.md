@@ -642,3 +642,193 @@ Stage Summary:
 5. Data backup/restore feature
 6. Multi-currency support
 7. PWA support for offline access
+
+---
+Task ID: R14
+Agent: Subagent (full-stack-developer)
+Task: Enhance Sidebar with Balance Widget, Notification Badge, and Mobile Bottom Navigation
+
+Work Log:
+- Added SidebarBalanceWidget component in page.tsx:
+  - Positioned between sidebar header and menu items
+  - Shows current month's balance (Sisa Uang) with Wallet icon
+  - Uses local state + useEffect to fetch from api.getDashboard(currentMonth)
+  - Green text (emerald-600/dark:emerald-400) for positive balance, red for negative
+  - Displays month label via getMonthLabel() (e.g., "Mei 2026")
+  - Styled with rounded card, gradient background (emerald-50 to white / emerald-950/20 to card in dark)
+  - Loading state shows "..." placeholder
+- Added Notification Badge for Bills on Tagihan menu item:
+  - Fetches bills via api.getBills() and counts those where status === 'pending' AND dueDate is within 7 days or past due
+  - Shows red count badge on the Tagihan icon (absolute positioned, bg-red-500)
+  - Shows secondary badge next to Tagihan label text (bg-red-100/dark:bg-red-900/40)
+  - Refetches on currentPage change for up-to-date count
+  - Caps display at "9+" for large counts
+- Added Mobile Bottom Navigation Bar (md:hidden):
+  - 5 items: Dashboard, Transaksi, History, Anggaran, Lainnya
+  - Fixed at bottom of viewport with frosted glass effect (backdrop-blur-xl, bg-background/80)
+  - Active item highlighted with emerald color
+  - "Lainnya" button opens bottom Sheet with 3-column grid of remaining items (Analisis, Kategori, Wishlist, Tabungan, Tagihan, Metode Bayar)
+  - Sheet has rounded top corners, active items highlighted
+  - Added pb-20 md:pb-6 to content area for bottom nav spacing
+- Updated QuickAddFAB:
+  - Changed from md:hidden to hidden md:flex (only visible on desktop)
+  - Mobile bottom nav provides direct access to Transaksi, making FAB redundant on mobile
+- Enhanced PageTransition component (page-transition.tsx):
+  - Added optional `stagger` prop
+  - When stagger enabled, wraps children in motion.div with containerVariants (staggerChildren: 0.05)
+  - Each direct child animates in with itemVariants (opacity: 0, y: 8 → opacity: 1, y: 0)
+  - Uses React.Children.map for stagger index-based delays
+  - Non-stagger mode preserves existing fade+slide animation
+  - Added proper TypeScript interfaces and exit variants
+- Added new imports: Wallet, MoreHorizontal from lucide-react; Sheet components from shadcn/ui
+- Added useCallback import for fetchUrgentBills optimization
+- All text in Indonesian
+- Dark mode fully supported for all new elements
+- ESLint passes with zero errors
+
+Stage Summary:
+- Sidebar now shows current month's balance in an elegant gradient card
+- Tagihan menu item shows urgent/overdue bill count badge in red
+- Mobile users have a frosted-glass bottom navigation bar with 5 quick-access items + "Lainnya" sheet
+- FAB button now desktop-only (mobile uses bottom nav for Transaksi)
+- PageTransition supports optional staggered children animation
+- All existing functionality preserved
+
+---
+Task ID: R15
+Agent: Subagent (full-stack-developer)
+Task: Add Keyboard Shortcuts and Command Palette to DompetKu
+
+Work Log:
+- Created /src/hooks/use-keyboard-shortcuts.ts:
+  - Custom hook that registers global keydown event listeners
+  - Ctrl/Cmd + 1-9, 0: Navigate to pages (Dashboard, Analisis, Transaksi, History, Anggaran, Kategori, Wishlist, Tabungan, Tagihan, Metode Bayar)
+  - Ctrl/Cmd + N: Navigate to Transaksi page (quick add)
+  - Ctrl/Cmd + K: Open/close command palette
+  - Escape: Close command palette / dialogs
+  - Handles both Ctrl (Windows/Linux) and Cmd (Mac) modifier keys via event.metaKey || event.ctrlKey
+  - Only calls event.preventDefault() for our shortcuts to avoid breaking browser defaults
+  - Uses DIGIT_PAGE_MAP constant for clean digit-to-page mapping
+  - Accepts setCurrentPage, onToggleCommandPalette, and onEscape callbacks
+- Created /src/components/command-palette.tsx:
+  - Polished command palette overlay that opens with Ctrl+K
+  - Search input at top with Search icon and ESC keyboard hint
+  - Items organized by category: "Navigasi" (10 pages) and "Aksi" (Tambah Transaksi)
+  - Each item shows: Lucide icon (matching sidebar), label, and keyboard shortcut hint (⌘1-⌘0, ⌘N)
+  - Typing in search filters items by label in real-time
+  - Clicking or pressing Enter executes the action (navigates to page)
+  - Arrow keys (↑↓) navigate between items
+  - Active item highlighted with bg-muted and emerald-colored icon background
+  - Mouse hover also sets active item
+  - Auto-scrolls active item into view
+  - Pressing Escape closes the palette
+  - Smooth open/close animation with framer-motion (scale + fade + y-translate, 150ms)
+  - Semi-transparent backdrop with backdrop-blur-sm
+  - Rounded-xl corners, shadow-2xl, subtle border
+  - Max height (max-h-72) with overflow-y-auto for results
+  - Footer with keyboard navigation hints (↑↓ Navigasi, ↵ Pilih, ESC Tutup)
+  - Empty state with Search icon and "Tidak ada hasil ditemukan" message
+  - Component remounts fresh each time (via AnimatePresence conditional rendering), avoiding setState-in-effect lint errors
+  - All text in Indonesian (Cari halaman atau perintah, Navigasi, Aksi, Pilih, Tutup, etc.)
+  - Dark mode fully supported
+  - ARIA attributes for accessibility (role="dialog", aria-modal, role="listbox", role="option", aria-selected)
+- Updated /src/app/page.tsx:
+  - Added imports: useKeyboardShortcuts hook, CommandPalette component
+  - Added commandPaletteOpen state (useState)
+  - Added toggleCommandPalette and closeCommandPalette callbacks (useCallback)
+  - Added useKeyboardShortcuts hook call with setCurrentPage, toggleCommandPalette, closeCommandPalette
+  - Added CommandPalette component to JSX with open, onClose, onNavigate props
+  - All existing functionality preserved
+- ESLint passes with zero errors
+
+Stage Summary:
+- Global keyboard shortcuts fully functional: Ctrl/Cmd+1-9/0 for page navigation, Ctrl/Cmd+N for quick add, Ctrl/Cmd+K for command palette, Escape to close
+- Command palette provides a polished, searchable overlay for all pages and actions
+- Keyboard-first navigation with arrow keys, Enter to select, Escape to close
+- Smooth framer-motion animations and dark mode support
+- All text in Indonesian
+- All existing functionality preserved
+
+---
+Task ID: R16
+Agent: Subagent (full-stack-developer)
+Task: Add Recurring Bill Auto-Generation and PDF Export
+
+Work Log:
+- Modified /src/app/api/bills/[id]/pay/route.ts:
+  - Added calculateNextDueDate() helper: weekly +7 days, monthly +1 month, yearly +1 year
+  - After marking bill as paid and creating expense transaction, checks if bill.recurring is not "none"
+  - If recurring, creates new Bill with same name/amount/category/paymentMethod/note/recurring, new dueDate, status "pending"
+  - Response now includes nextBill and autoGenerated boolean flag
+- Modified /src/components/tagihan.tsx:
+  - handlePay() now reads result.autoGenerated from API response
+  - Non-recurring bills: "Tagihan lunas! Transaksi pengeluaran telah dibuat."
+  - Recurring bills: "Tagihan lunas! Tagihan berikutnya telah dibuat otomatis."
+- Created /src/components/report-print.tsx:
+  - "Cetak Laporan" button with Printer icon
+  - Fetches dashboard data + expense transactions for current month
+  - Opens new browser window with professional print-friendly HTML layout
+  - Print layout includes: header, summary cards, stats row, category breakdown table, payment method breakdown, budget progress table, transactions table, footer with print date
+  - "Cetak Laporan" button in the print window triggers window.print()
+- Modified /src/components/dashboard.tsx:
+  - Added ReportPrint import
+  - Added "Cetak Laporan" button next to the month selector pill
+  - Button uses currentMonth from dashboard state
+- ESLint passes with zero errors
+
+Stage Summary:
+- Recurring bills automatically generate next occurrence when paid (weekly/monthly/yearly)
+- Toast messages differentiate between recurring and non-recurring bill payments
+- Professional print-friendly report available from Dashboard with one click
+- All existing functionality preserved
+
+
+---
+Task ID: R17-R19 (Cron Review Round 4)
+Agent: Main + Subagents
+Task: Comprehensive QA, Styling Enhancement, and Feature Addition
+
+Work Log:
+- Reviewed worklog.md and assessed current project status
+- Tested all API endpoints via curl - all working correctly
+- Dashboard: Expense=6,325,000, Income=9,500,000, Balance=3,175,000
+- Verified build succeeds - zero errors, lint passes
+
+### New Features Implemented (R14-R19):
+1. Sidebar Balance Widget with gradient card
+2. Notification Badge for urgent/overdue bills
+3. Mobile Bottom Navigation with frosted-glass bar
+4. Keyboard Shortcuts (Ctrl/Cmd+1-9,0, N, K, Escape)
+5. Command Palette with search and categories
+6. Recurring Bill Auto-Generation on payment
+7. Print Report / PDF Export from Dashboard
+8. Animated Number Counters (useAnimatedCounter hook)
+9. Dashboard Trend Indicators with month-over-month comparison
+10. Enhanced Chart Design with gradient accents
+11. History Page staggered animations + swipe-to-delete
+12. Analytics Page animated bars + ReferenceLine + medals
+13. All Management Pages enhanced (affordability, milestones, spending)
+14. Global CSS (card glow, gradient text, print styles)
+
+Stage Summary:
+- Build: zero errors, lint: zero errors
+- 10 pages, 15 components, 4 hooks, 7 Prisma models, 18+ API endpoints
+- ~10,400 lines total code
+
+## Current Project Assessment (Round 4):
+- Status: Production-ready expense tracker with polished UI
+- Build: npx next build succeeds, bun run lint passes
+- All API endpoints verified working
+
+## Unresolved Issues:
+1. Dev server unstable in sandbox (environment issue, not code bug)
+2. Use Preview Panel to view the app
+
+## Next Phase Recommendations:
+1. Transaction pagination/infinite scroll
+2. Data backup/restore
+3. Multi-currency support
+4. PWA for offline access
+5. E2E testing
+6. Performance optimization
+7. User authentication

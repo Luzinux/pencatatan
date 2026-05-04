@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, getMonthYear } from '@/lib/format'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -44,8 +43,11 @@ import {
   Calendar,
   Wallet,
   TrendingUp,
+  CheckCircle2,
+  Target,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAnimatedCounter } from '@/hooks/use-animated-counter'
 
 interface PaymentMethod {
   id: string
@@ -105,6 +107,91 @@ function getProgressTrackColor(percentage: number): string {
   return 'text-rose-500'
 }
 
+// ── Circular Progress Component ────────────────────────────────────────────
+function CircularProgress({
+  percentage,
+  size = 72,
+  strokeWidth = 6,
+  colorClass = 'text-teal-500',
+}: {
+  percentage: number
+  size?: number
+  strokeWidth?: number
+  colorClass?: string
+}) {
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (Math.min(percentage, 100) / 100) * circumference
+
+  return (
+    <svg width={size} height={size} className="-rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className="stroke-muted"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        className={`${colorClass} stroke-current`}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transition: 'stroke-dashoffset 0.8s ease-out' }}
+      />
+    </svg>
+  )
+}
+
+function getOverallProgressColor(percentage: number): string {
+  if (percentage >= 100) return 'text-emerald-500'
+  if (percentage >= 75) return 'text-amber-500'
+  if (percentage >= 50) return 'text-sky-500'
+  return 'text-rose-500'
+}
+
+// ── Celebration Particles ──────────────────────────────────────────────────
+function CelebrationParticles() {
+  const colors = ['bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-rose-400', 'bg-purple-400', 'bg-teal-400']
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {colors.map((color, i) => (
+        <div
+          key={i}
+          className={`confetti-particle absolute w-2 h-2 rounded-full ${color}`}
+          style={{
+            left: `${15 + i * 14}%`,
+            top: '30%',
+            animationDelay: `${i * 0.08}s`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ── Milestone Marker Component ────────────────────────────────────────────
+function MilestoneMarkers() {
+  const milestones = [25, 50, 75, 100]
+  return (
+    <div className="relative h-0">
+      {milestones.map((m) => (
+        <div
+          key={m}
+          className="absolute top-0.5 w-0.5 h-2 bg-muted-foreground/30"
+          style={{ left: `${m}%`, transform: 'translateX(-50%)' }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function SavingsCardSkeleton() {
   return (
     <Card>
@@ -132,7 +219,7 @@ function SavingsCardSkeleton() {
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-28 w-full rounded-xl" />
+      <Skeleton className="h-32 w-full rounded-xl" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <SavingsCardSkeleton key={i} />
@@ -165,6 +252,10 @@ export default function Savings() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
 
+  // Celebration tracking
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const prevCompletedRef = useRef<Set<string>>(new Set())
+
   // Add/Edit dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null)
@@ -193,7 +284,22 @@ export default function Savings() {
   const fetchSavings = useCallback(async () => {
     try {
       const data = await api.getSavings()
-      setSavings(Array.isArray(data) ? data : [])
+      const list = Array.isArray(data) ? data : []
+
+      // Detect newly completed goals for celebration
+      const newCompleted = new Set(
+        list.filter((s: SavingsGoal) => s.status === 'completed').map((s: SavingsGoal) => s.id)
+      )
+      const justCompleted = new Set(
+        [...newCompleted].filter((id) => !prevCompletedRef.current.has(id))
+      )
+      if (justCompleted.size > 0) {
+        setCompletedIds(justCompleted)
+        setTimeout(() => setCompletedIds(new Set()), 1500)
+      }
+      prevCompletedRef.current = newCompleted
+
+      setSavings(list)
     } catch {
       toast({
         title: 'Gagal memuat tabungan',
@@ -222,6 +328,24 @@ export default function Savings() {
   const totalSavings = savings.reduce((sum, s) => sum + s.currentAmount, 0)
   const totalTarget = savings.reduce((sum, s) => sum + s.targetAmount, 0)
   const overallProgress = totalTarget > 0 ? Math.min((totalSavings / totalTarget) * 100, 100) : 0
+  const completedGoals = savings.filter((s) => s.status === 'completed').length
+  const activeGoals = savings.filter((s) => s.status === 'active')
+
+  // Goals on track: active goals where progress >= expected progress based on time
+  const goalsOnTrack = activeGoals.filter((goal) => {
+    if (!goal.targetDate) return true // no deadline = on track
+    const daysRemaining = getDaysRemaining(goal.targetDate)
+    if (daysRemaining === null || daysRemaining <= 0) return false // overdue = not on track
+    const createdDate = new Date(goal.createdAt)
+    const totalDays = new Date(goal.targetDate).getTime() - createdDate.getTime()
+    const elapsedDays = Date.now() - createdDate.getTime()
+    const expectedProgress = totalDays > 0 ? (elapsedDays / totalDays) * 100 : 100
+    const actualProgress = goal.targetAmount > 0 ? (goal.currentAmount / goal.targetAmount) * 100 : 0
+    return actualProgress >= expectedProgress * 0.8 // 80% threshold for "on track"
+  }).length
+
+  // Animated counters
+  const animatedTotalSavings = useAnimatedCounter(Math.round(totalSavings), 800, !loading && savings.length > 0)
 
   // Open add dialog
   const handleAdd = () => {
@@ -243,6 +367,16 @@ export default function Savings() {
       note: goal.note || '',
     })
     setDialogOpen(true)
+  }
+
+  // Calculate progress per month for a goal
+  const getProgressPerMonth = (goal: SavingsGoal): number => {
+    const createdDate = new Date(goal.createdAt)
+    const now = new Date()
+    const monthsDiff = (now.getFullYear() - createdDate.getFullYear()) * 12 +
+      (now.getMonth() - createdDate.getMonth())
+    if (monthsDiff <= 0) return goal.currentAmount
+    return Math.round(goal.currentAmount / monthsDiff)
   }
 
   // Submit form (create or update)
@@ -379,35 +513,79 @@ export default function Savings() {
         </Button>
       </div>
 
-      {/* Summary Card */}
+      {/* Enhanced Summary Card */}
       {!loading && savings.length > 0 && (
-        <Card className="border-teal-200 bg-gradient-to-br from-teal-50 to-white dark:from-teal-950/20 dark:to-card dark:border-teal-900/50">
-          <CardContent className="p-4 md:p-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Terkumpul</p>
-                <p className="text-lg md:text-xl font-bold text-teal-600 dark:text-teal-400">
-                  {formatCurrency(totalSavings)}
-                </p>
+        <Card className="border-teal-200 bg-gradient-to-br from-teal-50 via-emerald-50/30 to-white dark:from-teal-950/20 dark:via-emerald-950/10 dark:to-card dark:border-teal-900/50">
+          <CardContent className="p-4 md:p-5">
+            <div className="flex items-center gap-4">
+              {/* Circular progress */}
+              <div className="relative flex-shrink-0">
+                <CircularProgress
+                  percentage={overallProgress}
+                  size={72}
+                  strokeWidth={6}
+                  colorClass={getOverallProgressColor(overallProgress)}
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-sm font-bold text-foreground">
+                    {overallProgress.toFixed(0)}%
+                  </span>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Target</p>
-                <p className="text-lg md:text-xl font-bold text-foreground">
-                  {formatCurrency(totalTarget)}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Progres</p>
-                <p className="text-lg md:text-xl font-bold text-foreground">
-                  {overallProgress.toFixed(0)}%
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-1.5">
-              <Progress value={overallProgress} className="h-3" />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{formatCurrency(totalSavings)} terkumpul</span>
-                <span>Kurang {formatCurrency(Math.max(totalTarget - totalSavings, 0))}</span>
+
+              {/* Stats */}
+              <div className="flex-1 min-w-0">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">Terkumpul</p>
+                    <p className="text-sm md:text-base font-bold text-teal-600 dark:text-teal-400 truncate">
+                      {formatCurrency(animatedTotalSavings)}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">Target</p>
+                    <p className="text-sm md:text-base font-bold text-foreground truncate">
+                      {formatCurrency(totalTarget)}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">Tercapai</p>
+                    <p className="text-sm md:text-base font-bold text-foreground">
+                      {completedGoals}/{savings.length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Goals on track indicator */}
+                {activeGoals.length > 0 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${
+                        goalsOnTrack === activeGoals.length
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900'
+                          : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900'
+                      }`}
+                    >
+                      <Target className="h-3 w-3 mr-1" />
+                      {goalsOnTrack}/{activeGoals.length} on track
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Overall progress bar */}
+                <div className="mt-3 space-y-1">
+                  <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full progress-animate ${getProgressColor(overallProgress)}`}
+                      style={{ width: `${overallProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{formatCurrency(totalSavings)} terkumpul</span>
+                    <span>Kurang {formatCurrency(Math.max(totalTarget - totalSavings, 0))}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -445,16 +623,21 @@ export default function Savings() {
                   : 0
                 const daysRemaining = getDaysRemaining(goal.targetDate)
                 const isCompleted = goal.status === 'completed'
+                const isJustCompleted = completedIds.has(goal.id)
+                const progressPerMonth = getProgressPerMonth(goal)
 
                 return (
                   <Card
                     key={goal.id}
-                    className={
+                    className={`relative overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${
                       isCompleted
                         ? 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-900/50 dark:bg-emerald-950/10'
                         : 'border-amber-200 bg-amber-50/30 dark:border-amber-900/50 dark:bg-amber-950/10'
-                    }
+                    }`}
                   >
+                    {/* Celebration overlay */}
+                    {isJustCompleted && <CelebrationParticles />}
+
                     <CardContent className="p-4 space-y-3">
                       {/* Name & Status */}
                       <div className="flex items-start justify-between gap-2">
@@ -474,35 +657,49 @@ export default function Savings() {
                             {goal.name}
                           </h3>
                         </div>
-                        <Badge
-                          className={`shrink-0 text-xs ${
-                            isCompleted
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-900'
-                              : 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900'
-                          }`}
-                          variant="outline"
-                        >
-                          {isCompleted ? 'Tercapai' : 'Aktif'}
-                        </Badge>
+                        {isCompleted && (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+                        )}
+                        {!isCompleted && (
+                          <Badge
+                            className={`shrink-0 text-xs ${
+                              'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:border-amber-900'
+                            }`}
+                            variant="outline"
+                          >
+                            Aktif
+                          </Badge>
+                        )}
                       </div>
 
-                      {/* Progress Bar */}
-                      <div className="space-y-1.5">
+                      {/* Progress Bar with milestone markers */}
+                      <div className="space-y-0">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-foreground">
+                          <span className={`font-medium ${getProgressTrackColor(percentage)}`}>
                             {percentage.toFixed(0)}%
                           </span>
                           <span className="text-muted-foreground text-xs">
                             {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
                           </span>
                         </div>
-                        <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${getProgressColor(percentage)}`}
-                            style={{ width: `${percentage}%` }}
-                          />
+                        <div className="relative">
+                          <div className="h-3 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full progress-animate ${getProgressColor(percentage)}`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <MilestoneMarkers />
                         </div>
                       </div>
+
+                      {/* Progress per month indicator */}
+                      {!isCompleted && progressPerMonth > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <TrendingUp className="h-3 w-3" />
+                          <span>Rata-rata {formatCurrency(progressPerMonth)}/bulan</span>
+                        </div>
+                      )}
 
                       {/* Days remaining & payment method */}
                       <div className="flex flex-wrap gap-2">
