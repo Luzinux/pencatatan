@@ -5,9 +5,10 @@ import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter,
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal } from 'lucide-react'
+import { LayoutDashboard, ArrowLeftRight, History, Tags, Heart, Receipt, CreditCard, Target, Plus, BarChart3, PiggyBank, ArrowLeft, Wallet, Menu, MoreHorizontal, Database } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { PageTransition } from '@/components/page-transition'
+import { NotificationCenter } from '@/components/notification-center'
 import { api } from '@/lib/api'
 import { formatCurrency, getMonthYear, getMonthLabel } from '@/lib/format'
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
@@ -26,6 +27,7 @@ const Metode = dynamic(() => import('@/components/metode'), { ssr: false })
 const Budget = dynamic(() => import('@/components/budget'), { ssr: false })
 const Analytics = dynamic(() => import('@/components/analytics'), { ssr: false })
 const Savings = dynamic(() => import('@/components/savings'), { ssr: false })
+const BackupRestore = dynamic(() => import('@/components/backup-restore'), { ssr: false })
 
 const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'aktivitas' | 'manajemen'; shortcut: string }[] = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'aktivitas', shortcut: '⌘1' },
@@ -38,6 +40,7 @@ const menuItems: { page: Page; label: string; icon: React.ElementType; group: 'a
   { page: 'savings', label: 'Tabungan', icon: PiggyBank, group: 'manajemen', shortcut: '⌘8' },
   { page: 'tagihan', label: 'Tagihan', icon: Receipt, group: 'manajemen', shortcut: '⌘9' },
   { page: 'metode', label: 'Metode Bayar', icon: CreditCard, group: 'manajemen', shortcut: '⌘0' },
+  { page: 'backup', label: 'Backup', icon: Database, group: 'manajemen', shortcut: '⌘B' },
 ]
 
 const BULAN_INDONESIA = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
@@ -123,6 +126,9 @@ function AppSidebar() {
           <div className="flex flex-col">
             <span className="text-sm font-semibold">DompetKu</span>
             <span className="text-xs text-muted-foreground">Pencatatan Keuangan</span>
+          </div>
+          <div className="ml-auto">
+            <NotificationCenter />
           </div>
         </div>
       </SidebarHeader>
@@ -262,6 +268,8 @@ function PageContent() {
       return <Tagihan />
     case 'metode':
       return <Metode />
+    case 'backup':
+      return <BackupRestore />
     default:
       return <Dashboard />
   }
@@ -281,6 +289,7 @@ function PageHeader() {
     savings: 'Tabungan',
     tagihan: 'Tagihan',
     metode: 'Metode Pembayaran',
+    backup: 'Backup & Pulihkan',
   }
 
   if (currentPage === 'dashboard') return null
@@ -349,6 +358,7 @@ const moreMenuItems: { page: Page; label: string; icon: React.ElementType }[] = 
   { page: 'savings', label: 'Tabungan', icon: PiggyBank },
   { page: 'tagihan', label: 'Tagihan', icon: Receipt },
   { page: 'metode', label: 'Metode Bayar', icon: CreditCard },
+  { page: 'backup', label: 'Backup', icon: Database },
 ]
 
 function MobileBottomNav() {

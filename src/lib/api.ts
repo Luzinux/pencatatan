@@ -98,4 +98,13 @@ export const api = {
     fetchJSON<any>(`/savings/${id}`, { method: 'DELETE' }),
   depositSavings: (id: string, data: any) =>
     fetchJSON<any>(`/savings/${id}/deposit`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Backup
+  exportBackup: (): Promise<Blob> =>
+    fetch('/api/backup').then(async (res) => {
+      if (!res.ok) throw new Error('Gagal mengekspor backup')
+      return res.blob()
+    }),
+  importBackup: (data: any) =>
+    fetchJSON<any>('/backup', { method: 'POST', body: JSON.stringify(data) }),
 }

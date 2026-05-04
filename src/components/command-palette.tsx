@@ -16,6 +16,7 @@ import {
   CreditCard,
   Plus,
   Search,
+  Database,
 } from 'lucide-react'
 
 interface CommandPaletteProps {
@@ -46,6 +47,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   { id: 'nav-savings', label: 'Tabungan', icon: PiggyBank, shortcut: '⌘8', category: 'navigasi', page: 'savings' },
   { id: 'nav-tagihan', label: 'Tagihan', icon: Receipt, shortcut: '⌘9', category: 'navigasi', page: 'tagihan' },
   { id: 'nav-metode', label: 'Metode Bayar', icon: CreditCard, shortcut: '⌘0', category: 'navigasi', page: 'metode' },
+  { id: 'nav-backup', label: 'Backup', icon: Database, shortcut: '⌘B', category: 'navigasi', page: 'backup' },
   // Aksi
   { id: 'action-add', label: 'Tambah Transaksi', icon: Plus, shortcut: '⌘N', category: 'aksi', page: 'transaksi' },
 ]

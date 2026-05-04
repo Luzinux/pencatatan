@@ -469,7 +469,7 @@ export default function Tagihan() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <CreditCard className="h-5 w-5 text-foreground" />
-          <h2 className="text-lg font-semibold text-foreground">Tagihan</h2>
+          <h2 className="text-xl font-bold text-foreground">Tagihan</h2>
         </div>
         <Button onClick={openAddDialog} size="sm" className="gap-1.5">
           <Plus className="h-4 w-4" />
@@ -551,7 +551,7 @@ export default function Tagihan() {
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-base font-bold text-foreground">
+                      <p className="text-base font-bold tabular-nums text-foreground">
                         {formatCurrency(bill.amount)}
                       </p>
                     </div>

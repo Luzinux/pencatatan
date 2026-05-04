@@ -46,6 +46,13 @@ export function useKeyboardShortcuts({
         return
       }
 
+      // Cmd/Ctrl + B → Navigate to Backup
+      if (isMod && event.key === 'b') {
+        event.preventDefault()
+        setCurrentPage('backup')
+        return
+      }
+
       // Cmd/Ctrl + 1-9, 0 → Navigate to pages
       if (isMod && event.key in DIGIT_PAGE_MAP) {
         event.preventDefault()

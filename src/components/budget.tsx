@@ -202,7 +202,7 @@ function BudgetCard({
             </div>
             <div>
               <p className="text-sm font-semibold">{budget.categoryName}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground tabular-nums">
                 Anggaran: {formatCurrency(budget.budgetAmount)}
               </p>
             </div>
@@ -239,10 +239,10 @@ function BudgetCard({
 
         {/* Footer: Spent / Remaining / Daily rate */}
         <div className="mt-2 flex items-center justify-between text-xs">
-          <span className={isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
+          <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
             Terpakai: {formatCurrency(budget.spent)}
           </span>
-          <span className={isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}>
+          <span className={`tabular-nums ${isOverBudget ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
             {isOverBudget
               ? `Lebih ${formatCurrency(budget.spent - budget.budgetAmount)}`
               : `Sisa: ${formatCurrency(remaining)}`
@@ -523,13 +523,13 @@ export default function Budget() {
                   <div className="flex-1 min-w-0 grid grid-cols-3 gap-3">
                     <div className="space-y-0.5">
                       <p className="text-xs font-medium text-muted-foreground">Total Anggaran</p>
-                      <p className="text-base md:text-lg font-bold text-teal-700 dark:text-teal-400 truncate">
+                      <p className="text-base md:text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400 truncate">
                         {formatCurrency(animatedBudget)}
                       </p>
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-xs font-medium text-muted-foreground">Total Terpakai</p>
-                      <p className="text-base md:text-lg font-bold text-foreground truncate">
+                      <p className="text-base md:text-lg font-bold tabular-nums text-foreground truncate">
                         {formatCurrency(animatedSpent)}
                       </p>
                     </div>
@@ -537,7 +537,7 @@ export default function Budget() {
                       <p className="text-xs font-medium text-muted-foreground">
                         {totalRemaining >= 0 ? 'Sisa' : 'Lebih'}
                       </p>
-                      <p className={`text-base md:text-lg font-bold truncate ${
+                      <p className={`text-base md:text-lg font-bold tabular-nums truncate ${
                         totalRemaining >= 0
                           ? 'text-emerald-600 dark:text-emerald-400'
                           : 'text-red-600 dark:text-red-400'

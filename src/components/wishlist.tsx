@@ -476,7 +476,7 @@ export default function Wishlist() {
                 <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
                   Total Nilai Wishlist
                 </p>
-                <p className="text-xl font-bold text-foreground">
+                <p className="text-xl font-bold tabular-nums text-foreground">
                   {formatCurrency(animatedTotalValue)}
                 </p>
                 <div className="flex items-center gap-3 mt-1">
@@ -574,7 +574,7 @@ export default function Wishlist() {
 
                       {/* Amount */}
                       <p
-                        className={`text-2xl font-bold ${wishlist.status === 'achieved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}
+                        className={`text-2xl font-bold tabular-nums ${wishlist.status === 'achieved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}
                       >
                         {formatCurrency(wishlist.amount)}
                       </p>

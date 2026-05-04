@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -28,7 +27,14 @@ import {
   Building2,
   ArrowRight,
   Clock,
+  Shield,
+  Lightbulb,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight as ChevronRightIcon,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 import ReportPrint from '@/components/report-print'
 import {
   BarChart,
@@ -223,77 +229,571 @@ function PieLegend({ payload }: any) {
   )
 }
 
+// ── Sparkline Component ────────────────────────────────────────────────────
+function Sparkline({ data, color, width = 80, height = 28 }: { data: number[]; color: string; width?: number; height?: number }) {
+  if (!data || data.length < 2) return null
+
+  const max = Math.max(...data)
+  const min = Math.min(...data)
+  const range = max - min || 1
+
+  const padding = 2
+  const chartW = width - padding * 2
+  const chartH = height - padding * 2
+
+  const points = data.map((val, i) => {
+    const x = padding + (i / (data.length - 1)) * chartW
+    const y = padding + chartH - ((val - min) / range) * chartH
+    return { x, y }
+  })
+
+  const pathD = points
+    .map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
+    .join(' ')
+
+  return (
+    <svg width={width} height={height} className="opacity-60">
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// ── Animated Gradient Border Card ──────────────────────────────────────────
+function GradientBorderCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`relative rounded-xl p-[1px] overflow-hidden ${className}`}>
+      {/* Animated gradient border */}
+      <div
+        className="absolute inset-0 animate-gradient-border rounded-xl"
+        style={{
+          background: 'linear-gradient(var(--border-angle, 0deg), #ef4444, #f59e0b, #22c55e, #06b6d4, #8b5cf6, #ef4444)',
+        }}
+      />
+      {/* Inner content */}
+      <div className="relative rounded-[11px]">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// ── Financial Health Score Gauge ───────────────────────────────────────────
+interface HealthScoreResult {
+  score: number
+  savingsPoints: number
+  budgetPoints: number
+  billPoints: number
+  emergencyPoints: number
+  maxPossible: number
+  statusLabel: string
+  statusColor: string
+}
+
+function calculateHealthScore(data: DashboardData): HealthScoreResult {
+  // Savings Rate (0-30 points)
+  let savingsPoints = 0
+  if (data.savingsRate > 20) savingsPoints = 30
+  else if (data.savingsRate >= 10) savingsPoints = 20
+  else if (data.savingsRate >= 5) savingsPoints = 10
+  else if (data.savingsRate >= 0) savingsPoints = 5
+  // negative = 0
+
+  // Budget Adherence (0-25 points)
+  let budgetPoints = 0
+  const hasBudgets = data.budgetProgress && data.budgetProgress.length > 0
+  if (hasBudgets) {
+    const avgBudgetUsage = data.budgetProgress.reduce((sum, b) => sum + b.percentage, 0) / data.budgetProgress.length
+    if (avgBudgetUsage < 75) budgetPoints = 25
+    else if (avgBudgetUsage <= 100) budgetPoints = 15
+    else budgetPoints = 5
+  }
+
+  // Bill Timeliness (0-20 points)
+  let billPoints = 20 // Start with perfect score
+  const now = new Date()
+  const overdueBills = data.upcomingBills.filter((bill) => {
+    const dueDate = new Date(bill.dueDate)
+    return dueDate < now && bill.status === 'pending'
+  })
+  if (overdueBills.length === 0) billPoints = 20
+  else if (overdueBills.length <= 2) billPoints = 10
+  else billPoints = 0
+
+  // Emergency Fund (0-25 points)
+  let emergencyPoints = 0
+  if (data.totalExpense > 0) {
+    const monthsCovered = data.balance / data.totalExpense
+    if (monthsCovered > 3) emergencyPoints = 25
+    else if (monthsCovered > 2) emergencyPoints = 20
+    else if (monthsCovered > 1) emergencyPoints = 15
+    else emergencyPoints = 5
+  }
+
+  // Calculate max possible (if no budget data, adjust)
+  const maxPossible = hasBudgets ? 100 : 75
+
+  const rawScore = savingsPoints + budgetPoints + billPoints + emergencyPoints
+  // Normalize score to 0-100 if no budgets
+  const score = hasBudgets ? rawScore : Math.round((rawScore / 75) * 100)
+
+  let statusLabel = ''
+  let statusColor = ''
+  if (score >= 80) {
+    statusLabel = 'Sangat Sehat'
+    statusColor = '#10b981'
+  } else if (score >= 60) {
+    statusLabel = 'Sehat'
+    statusColor = '#22c55e'
+  } else if (score >= 40) {
+    statusLabel = 'Cukup'
+    statusColor = '#f59e0b'
+  } else {
+    statusLabel = 'Perlu Perhatian'
+    statusColor = '#ef4444'
+  }
+
+  return {
+    score,
+    savingsPoints,
+    budgetPoints,
+    billPoints,
+    emergencyPoints,
+    maxPossible,
+    statusLabel,
+    statusColor,
+  }
+}
+
+function HealthScoreGauge({ healthScore }: { healthScore: HealthScoreResult }) {
+  const { score, statusLabel, statusColor } = healthScore
+  const radius = 70
+  const strokeWidth = 12
+  const circumference = 2 * Math.PI * radius
+  const progress = Math.min(score, 100) / 100
+  const strokeDashoffset = circumference * (1 - progress)
+
+  return (
+    <div className="flex flex-col items-center">
+      <p className="mb-2 text-sm font-semibold text-muted-foreground">Skor Keuangan</p>
+      <div className="relative flex items-center justify-center">
+        <svg width="180" height="180" className="-rotate-90">
+          <defs>
+            <linearGradient id="healthGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ef4444" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#22c55e" />
+            </linearGradient>
+          </defs>
+          {/* Background ring */}
+          <circle
+            cx="90"
+            cy="90"
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            className="text-muted/20"
+          />
+          {/* Progress ring */}
+          <circle
+            cx="90"
+            cy="90"
+            r={radius}
+            fill="none"
+            stroke="url(#healthGradient)"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-1000 ease-out"
+          />
+        </svg>
+        {/* Score number in center */}
+        <div className="absolute flex flex-col items-center">
+          <span className="text-4xl font-bold" style={{ color: statusColor }}>
+            {score}
+          </span>
+          <span
+            className="mt-0.5 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+            style={{
+              color: statusColor,
+              backgroundColor: `${statusColor}15`,
+            }}
+          >
+            {statusLabel}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Health Score Breakdown ─────────────────────────────────────────────────
+function HealthScoreBreakdown({ healthScore, hasBudgets }: { healthScore: HealthScoreResult; hasBudgets: boolean }) {
+  const factors = [
+    {
+      label: 'Rasio Tabungan',
+      points: healthScore.savingsPoints,
+      max: 30,
+      icon: PiggyBank,
+      color: healthScore.savingsPoints >= 20 ? '#22c55e' : healthScore.savingsPoints >= 10 ? '#f59e0b' : '#ef4444',
+    },
+    {
+      label: 'Kepatuhan Anggaran',
+      points: healthScore.budgetPoints,
+      max: 25,
+      icon: Target,
+      color: healthScore.budgetPoints >= 20 ? '#22c55e' : healthScore.budgetPoints >= 10 ? '#f59e0b' : '#ef4444',
+      hidden: !hasBudgets,
+    },
+    {
+      label: 'Ketepatan Tagihan',
+      points: healthScore.billPoints,
+      max: 20,
+      icon: Receipt,
+      color: healthScore.billPoints >= 15 ? '#22c55e' : healthScore.billPoints >= 10 ? '#f59e0b' : '#ef4444',
+    },
+    {
+      label: 'Dana Darurat',
+      points: healthScore.emergencyPoints,
+      max: 25,
+      icon: Shield,
+      color: healthScore.emergencyPoints >= 20 ? '#22c55e' : healthScore.emergencyPoints >= 10 ? '#f59e0b' : '#ef4444',
+    },
+  ].filter((f) => !f.hidden)
+
+  return (
+    <div className="space-y-2.5">
+      {factors.map((factor) => {
+        const IconComponent = factor.icon
+        const pct = (factor.points / factor.max) * 100
+        return (
+          <div key={factor.label} className="space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <IconComponent className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">{factor.label}</span>
+              </div>
+              <span className="text-xs font-semibold" style={{ color: factor.color }}>
+                {factor.points}/{factor.max}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${pct}%`, backgroundColor: factor.color }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Smart Insight Card ─────────────────────────────────────────────────────
+interface InsightItem {
+  icon: React.ElementType
+  iconColor: string
+  iconBg: string
+  text: string
+  actionable: boolean
+  targetPage?: string
+}
+
+function generateInsights(data: DashboardData, prevMonthTrend: MonthlyTrendItem | null): InsightItem[] {
+  const insights: InsightItem[] = []
+
+  // 1. Expense increase from last month
+  if (prevMonthTrend && prevMonthTrend.expense > 0) {
+    const expenseChange = ((data.totalExpense - prevMonthTrend.expense) / prevMonthTrend.expense) * 100
+    if (expenseChange > 20) {
+      const topCat = data.topCategories[0]?.category?.name ?? 'tertentu'
+      insights.push({
+        icon: TrendingUp,
+        iconColor: '#ef4444',
+        iconBg: '#fef2f2',
+        text: `Pengeluaran naik ${expenseChange.toFixed(0)}% dari bulan lalu. Coba kurangi pengeluaran di kategori ${topCat}.`,
+        actionable: true,
+        targetPage: 'analytics',
+      })
+    }
+  }
+
+  // 2. Low savings rate
+  if (data.savingsRate >= 0 && data.savingsRate < 10) {
+    insights.push({
+      icon: PiggyBank,
+      iconColor: '#f59e0b',
+      iconBg: '#fffbeb',
+      text: `Rasio tabungan Anda rendah (${data.savingsRate.toFixed(0)}%). Idealnya simpan minimal 20% dari pemasukan.`,
+      actionable: true,
+      targetPage: 'budget',
+    })
+  }
+
+  // 3. Budget category almost used up
+  if (data.budgetProgress) {
+    const nearLimit = data.budgetProgress.filter((b) => b.percentage >= 90 && b.percentage <= 100)
+    nearLimit.forEach((b) => {
+      const remaining = b.budgetAmount - b.spent
+      insights.push({
+        icon: AlertTriangle,
+        iconColor: '#f59e0b',
+        iconBg: '#fffbeb',
+        text: `Anggaran ${b.categoryName} hampir habis (${b.percentage.toFixed(0)}%). Tersisa ${formatCurrency(remaining)} untuk sisa bulan ini.`,
+        actionable: true,
+        targetPage: 'budget',
+      })
+    })
+  }
+
+  // 4. Overdue bills
+  const now = new Date()
+  const overdueBills = data.upcomingBills.filter((bill) => {
+    const dueDate = new Date(bill.dueDate)
+    return dueDate < now && bill.status === 'pending'
+  })
+  if (overdueBills.length > 0) {
+    insights.push({
+      icon: AlertCircle,
+      iconColor: '#ef4444',
+      iconBg: '#fef2f2',
+      text: `Ada ${overdueBills.length} tagihan yang sudah jatuh tempo. Bayar segera untuk menghindari denda.`,
+      actionable: true,
+      targetPage: 'tagihan',
+    })
+  }
+
+  // 5. Budget overspent
+  if (data.budgetProgress) {
+    const overspent = data.budgetProgress.filter((b) => b.percentage > 100)
+    overspent.forEach((b) => {
+      const overPct = b.percentage - 100
+      insights.push({
+        icon: AlertCircle,
+        iconColor: '#ef4444',
+        iconBg: '#fef2f2',
+        text: `Anggaran ${b.categoryName} sudah terlampaui ${overPct.toFixed(0)}%. Pertimbangkan untuk menyesuaikan anggaran bulan depan.`,
+        actionable: true,
+        targetPage: 'budget',
+      })
+    })
+  }
+
+  // 6. Positive balance and growing
+  if (data.balance > 0 && prevMonthTrend) {
+    const prevBalance = prevMonthTrend.income - prevMonthTrend.expense
+    if (prevBalance > 0) {
+      const balanceChange = ((data.balance - prevBalance) / prevBalance) * 100
+      if (balanceChange > 5) {
+        insights.push({
+          icon: CheckCircle2,
+          iconColor: '#22c55e',
+          iconBg: '#f0fdf4',
+          text: `Keuangan Anda dalam kondisi baik! Saldo naik ${balanceChange.toFixed(0)}% dari bulan lalu.`,
+          actionable: false,
+        })
+      }
+    }
+  }
+
+  // 7. General tip if no specific insights or fewer than 3
+  if (insights.length < 3) {
+    insights.push({
+      icon: Lightbulb,
+      iconColor: '#8b5cf6',
+      iconBg: '#f5f3ff',
+      text: 'Tips: Pisahkan kebutuhan dan keinginan saat berbelanja untuk mengontrol pengeluaran.',
+      actionable: false,
+    })
+  }
+
+  return insights.slice(0, 5)
+}
+
+function InsightCard({ insight, index, onNavigate }: { insight: InsightItem; index: number; onNavigate: (page: string) => void }) {
+  const IconComponent = insight.icon
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.08 }}
+      className="group flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/30"
+    >
+      {/* Colored icon circle */}
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: insight.iconBg }}
+      >
+        <IconComponent className="h-4 w-4" style={{ color: insight.iconColor }} />
+      </div>
+      {/* Text */}
+      <p className="min-w-0 flex-1 text-sm leading-relaxed text-foreground/80">
+        {insight.text}
+      </p>
+      {/* Actionable arrow */}
+      {insight.actionable && insight.targetPage && (
+        <button
+          onClick={() => onNavigate(insight.targetPage!)}
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Lihat detail"
+        >
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
+      )}
+    </motion.div>
+  )
+}
+
+// ── Month Comparison Text ──────────────────────────────────────────────────
+function MonthComparisonText({ current, previous, type }: { current: number; previous: number; type: 'expense' | 'income' | 'balance' }) {
+  if (previous === 0) return null
+  const change = ((current - previous) / previous) * 100
+  if (Math.abs(change) < 0.1) return null
+
+  const isUp = change > 0
+  const isPositive =
+    type === 'income'
+      ? isUp
+      : type === 'expense'
+        ? !isUp
+        : isUp
+
+  return (
+    <div className={`flex items-center gap-1 text-xs font-medium ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+      {isUp ? (
+        <TrendingUp className="h-3 w-3" />
+      ) : (
+        <TrendingDown className="h-3 w-3" />
+      )}
+      <span>vs bulan lalu {Math.abs(change).toFixed(0)}%</span>
+    </div>
+  )
+}
+
 // ── Loading Skeleton ───────────────────────────────────────────────────────
+function ShimmerBlock({ className = '' }: { className?: string }) {
+  return <div className={`shimmer-loading rounded-md ${className}`} />
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
       {/* Greeting skeleton */}
       <div className="space-y-1">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-3 w-28" />
+        <ShimmerBlock className="h-5 w-40" />
+        <ShimmerBlock className="h-3 w-28" />
       </div>
       {/* Month selector skeleton */}
       <div className="flex items-center justify-center gap-4">
-        <Skeleton className="h-9 w-9 rounded-md" />
-        <Skeleton className="h-8 w-32 rounded-full" />
-        <Skeleton className="h-9 w-9 rounded-md" />
+        <ShimmerBlock className="h-9 w-9 rounded-lg" />
+        <ShimmerBlock className="h-8 w-32 rounded-full" />
+        <ShimmerBlock className="h-9 w-9 rounded-lg" />
       </div>
-      {/* Summary cards skeleton */}
+      {/* Summary cards skeleton - with gradient-like shape hints */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
+          <Card key={i} className="overflow-hidden">
             <CardHeader className="pb-2">
-              <Skeleton className="h-4 w-28" />
+              <div className="flex items-center justify-between">
+                <ShimmerBlock className="h-4 w-28" />
+                <ShimmerBlock className="h-8 w-8 rounded-full" />
+              </div>
             </CardHeader>
             <CardContent>
-              <Skeleton className="h-9 w-36" />
+              <ShimmerBlock className="h-9 w-36 mb-2" />
+              <ShimmerBlock className="h-3 w-20" />
             </CardContent>
           </Card>
         ))}
       </div>
-      {/* Stats row skeleton */}
+      {/* Health score + Insights skeleton */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardContent className="flex flex-col items-center p-6">
+            <ShimmerBlock className="h-5 w-28 mb-4" />
+            <ShimmerBlock className="h-40 w-40 rounded-full" />
+            <ShimmerBlock className="h-4 w-16 mt-3" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <ShimmerBlock className="h-5 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3 rounded-lg border p-3">
+                <ShimmerBlock className="h-8 w-8 rounded-full shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <ShimmerBlock className="h-3 w-full" />
+                  <ShimmerBlock className="h-3 w-3/4" />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      {/* Stats row skeleton - circular icon + numbers */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
-            <CardContent className="p-4">
-              <Skeleton className="h-16 w-full" />
+            <CardContent className="p-4 flex items-center gap-3">
+              <ShimmerBlock className="h-12 w-12 rounded-full shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <ShimmerBlock className="h-3 w-20" />
+                <ShimmerBlock className="h-5 w-24" />
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
-      {/* Charts skeleton */}
+      {/* Charts skeleton - with title area */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <Skeleton className="h-5 w-36" />
+            <ShimmerBlock className="h-5 w-36" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-64 w-full rounded-md" />
+            <div className="space-y-2">
+              <ShimmerBlock className="h-4 w-full" />
+              <ShimmerBlock className="h-52 w-full rounded-md" />
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <Skeleton className="h-5 w-36" />
+            <ShimmerBlock className="h-5 w-36" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-64 w-full rounded-md" />
+            <div className="space-y-2">
+              <ShimmerBlock className="h-4 w-full" />
+              <ShimmerBlock className="h-52 w-full rounded-md" />
+            </div>
           </CardContent>
         </Card>
       </div>
-      {/* Recent transactions skeleton */}
+      {/* Recent transactions skeleton - with circular icons */}
       <Card>
         <CardHeader>
-          <Skeleton className="h-5 w-40" />
+          <ShimmerBlock className="h-5 w-40" />
         </CardHeader>
         <CardContent className="space-y-4">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3">
-              <Skeleton className="h-10 w-10 rounded-full" />
+              <ShimmerBlock className="h-10 w-10 rounded-full shrink-0" />
               <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-20" />
+                <ShimmerBlock className="h-4 w-32" />
+                <ShimmerBlock className="h-3 w-20" />
               </div>
-              <Skeleton className="h-4 w-24" />
+              <ShimmerBlock className="h-4 w-24" />
             </div>
           ))}
         </CardContent>
@@ -460,6 +960,26 @@ export default function Dashboard() {
     return data.monthlyTrend[data.monthlyTrend.length - 1]
   }, [data?.monthlyTrend])
 
+  // ── Health Score ─────────────────────────────────────────────────────────
+  const healthScore = useMemo(() => {
+    if (!data) return null
+    return calculateHealthScore(data)
+  }, [data])
+
+  // ── Smart Insights ──────────────────────────────────────────────────────
+  const insights = useMemo(() => {
+    if (!data) return []
+    return generateInsights(data, prevMonthTrend)
+  }, [data, prevMonthTrend])
+
+  // ── Sparkline data from monthly trend ───────────────────────────────────
+  const expenseSparkline = useMemo(() => data?.monthlyTrend.map((m) => m.expense) ?? [], [data?.monthlyTrend])
+  const incomeSparkline = useMemo(() => data?.monthlyTrend.map((m) => m.income) ?? [], [data?.monthlyTrend])
+  const balanceSparkline = useMemo(
+    () => data?.monthlyTrend.map((m) => m.income - m.expense) ?? [],
+    [data?.monthlyTrend]
+  )
+
   // Prepare bar chart data
   const barChartData =
     data?.monthlyTrend.map((item) => ({
@@ -511,6 +1031,7 @@ export default function Dashboard() {
   const hasTrendData = data.monthlyTrend.some((m) => m.expense > 0 || m.income > 0)
   const hasCategories = data.topCategories.length > 0
   const hasPaymentMethodData = data.paymentMethodBreakdown.length > 0
+  const hasBudgets = data.budgetProgress && data.budgetProgress.length > 0
   const maxPmAmount = hasPaymentMethodData
     ? Math.max(...data.paymentMethodBreakdown.map((pm) => pm.totalAmount))
     : 0
@@ -558,98 +1079,168 @@ export default function Dashboard() {
         <ReportPrint currentMonth={currentMonth} />
       </div>
 
-      {/* ── Summary Cards with Trend Indicators ─────────────────────────── */}
+      {/* ── Summary Cards with Sparkline & Gradient Border ──────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Pengeluaran */}
-        <Card className="relative overflow-hidden border-red-200 bg-gradient-to-br from-red-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-red-900/40 dark:from-red-950/20 dark:to-card">
-          {/* Decorative ring behind amount */}
-          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-red-100/40 dark:border-red-900/20" />
-          <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
-            <ArrowDownLeft className="h-5 w-5 text-red-500" />
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">
-              Total Pengeluaran
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400">
-              {formatCurrency(animatedExpense)}
-            </p>
-            {prevMonthTrend && currentMonthTrend && (
-              <div className="mt-1.5">
-                <TrendIndicator
-                  current={currentMonthTrend.expense}
-                  previous={prevMonthTrend.expense}
-                  type="expense"
-                />
+        <GradientBorderCard>
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-red-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-red-950/20 dark:to-card">
+            {/* Decorative ring behind amount */}
+            <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-red-100/40 dark:border-red-900/20" />
+            <div className="absolute right-3 top-3 rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+              <ArrowDownLeft className="h-5 w-5 text-red-500" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-red-600 dark:text-red-400">
+                Total Pengeluaran
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-3xl font-bold tabular-nums text-red-600 transition-all duration-500 sm:text-4xl dark:text-red-400">
+                    {formatCurrency(animatedExpense)}
+                  </p>
+                  {prevMonthTrend && currentMonthTrend && (
+                    <div className="mt-1.5">
+                      <MonthComparisonText
+                        current={currentMonthTrend.expense}
+                        previous={prevMonthTrend.expense}
+                        type="expense"
+                      />
+                    </div>
+                  )}
+                </div>
+                <Sparkline data={expenseSparkline} color="#ef4444" />
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </GradientBorderCard>
 
         {/* Total Pemasukan */}
-        <Card className="relative overflow-hidden border-green-200 bg-gradient-to-br from-green-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-green-900/40 dark:from-green-950/20 dark:to-card">
-          {/* Decorative ring behind amount */}
-          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-green-100/40 dark:border-green-900/20" />
-          <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
-            <ArrowUpRight className="h-5 w-5 text-green-500" />
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-600 dark:text-green-400">
-              Total Pemasukan
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400">
-              {formatCurrency(animatedIncome)}
-            </p>
-            {prevMonthTrend && currentMonthTrend && (
-              <div className="mt-1.5">
-                <TrendIndicator
-                  current={currentMonthTrend.income}
-                  previous={prevMonthTrend.income}
-                  type="income"
-                />
+        <GradientBorderCard>
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-green-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-green-950/20 dark:to-card">
+            {/* Decorative ring behind amount */}
+            <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-green-100/40 dark:border-green-900/20" />
+            <div className="absolute right-3 top-3 rounded-full bg-green-100 p-2 dark:bg-green-900/30">
+              <ArrowUpRight className="h-5 w-5 text-green-500" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-green-600 dark:text-green-400">
+                Total Pemasukan
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-3xl font-bold tabular-nums text-green-600 transition-all duration-500 sm:text-4xl dark:text-green-400">
+                    {formatCurrency(animatedIncome)}
+                  </p>
+                  {prevMonthTrend && currentMonthTrend && (
+                    <div className="mt-1.5">
+                      <MonthComparisonText
+                        current={currentMonthTrend.income}
+                        previous={prevMonthTrend.income}
+                        type="income"
+                      />
+                    </div>
+                  )}
+                </div>
+                <Sparkline data={incomeSparkline} color="#22c55e" />
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </GradientBorderCard>
 
         {/* Sisa Uang */}
-        <Card className="relative overflow-hidden border-teal-200 bg-gradient-to-br from-teal-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:border-teal-900/40 dark:from-teal-950/20 dark:to-card">
-          {/* Decorative ring behind amount */}
-          <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-teal-100/40 dark:border-teal-900/20" />
-          <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
-            <Wallet className="h-5 w-5 text-teal-500" />
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-teal-600 dark:text-teal-400">
-              Sisa Uang
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={`text-3xl font-bold transition-all duration-500 sm:text-4xl ${
-                data.balance >= 0
-                  ? 'text-teal-600 dark:text-teal-400'
-                  : 'text-red-600 dark:text-red-400'
-              }`}
-            >
-              {formatCurrency(animatedBalance)}
-            </p>
-            {prevMonthTrend && currentMonthTrend && (
-              <div className="mt-1.5">
-                <TrendIndicator
-                  current={currentMonthTrend.income - currentMonthTrend.expense}
-                  previous={prevMonthTrend.income - prevMonthTrend.expense}
-                  type="income"
+        <GradientBorderCard>
+          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-teal-50 to-white shadow-sm transition-transform duration-200 hover:scale-[1.01] dark:from-teal-950/20 dark:to-card">
+            {/* Decorative ring behind amount */}
+            <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full border-[12px] border-teal-100/40 dark:border-teal-900/20" />
+            <div className="absolute right-3 top-3 rounded-full bg-teal-100 p-2 dark:bg-teal-900/30">
+              <Wallet className="h-5 w-5 text-teal-500" />
+            </div>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-teal-600 dark:text-teal-400">
+                Sisa Uang
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className={`text-3xl font-bold tabular-nums transition-all duration-500 sm:text-4xl ${
+                      data.balance >= 0
+                        ? 'text-teal-600 dark:text-teal-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {formatCurrency(animatedBalance)}
+                  </p>
+                  {prevMonthTrend && currentMonthTrend && (
+                    <div className="mt-1.5">
+                      <MonthComparisonText
+                        current={currentMonthTrend.income - currentMonthTrend.expense}
+                        previous={prevMonthTrend.income - prevMonthTrend.expense}
+                        type="balance"
+                      />
+                    </div>
+                  )}
+                </div>
+                <Sparkline
+                  data={balanceSparkline}
+                  color={data.balance >= 0 ? '#14b8a6' : '#ef4444'}
                 />
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </GradientBorderCard>
       </div>
+
+      {/* ── Financial Health Score + Smart Insights ────────────────────────── */}
+      {healthScore && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Health Score Card */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500" />
+            <CardContent className="p-6">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <HealthScoreGauge healthScore={healthScore} />
+                <div className="w-full sm:flex-1 sm:pl-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Rincian Skor
+                  </p>
+                  <HealthScoreBreakdown healthScore={healthScore} hasBudgets={hasBudgets} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Smart Insights Card */}
+          <Card className="relative overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500" />
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2.5 text-base">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                  <Lightbulb className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                </div>
+                Wawasan Cerdas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {insights.map((insight, index) => (
+                  <InsightCard
+                    key={index}
+                    insight={insight}
+                    index={index}
+                    onNavigate={(page) => setCurrentPage(page as any)}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ── Stats Row ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -986,7 +1577,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Budget Progress - Enhanced ─────────────────────────────────── */}
-      {data.budgetProgress && data.budgetProgress.length > 0 && (
+      {hasBudgets && (
         <Card className="relative overflow-hidden">
           {/* Top accent line */}
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500" />

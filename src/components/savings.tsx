@@ -538,13 +538,13 @@ export default function Savings() {
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-muted-foreground">Terkumpul</p>
-                    <p className="text-sm md:text-base font-bold text-teal-600 dark:text-teal-400 truncate">
+                    <p className="text-sm md:text-base font-bold tabular-nums text-teal-600 dark:text-teal-400 truncate">
                       {formatCurrency(animatedTotalSavings)}
                     </p>
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-xs font-medium text-muted-foreground">Target</p>
-                    <p className="text-sm md:text-base font-bold text-foreground truncate">
+                    <p className="text-sm md:text-base font-bold tabular-nums text-foreground truncate">
                       {formatCurrency(totalTarget)}
                     </p>
                   </div>
@@ -678,7 +678,7 @@ export default function Savings() {
                           <span className={`font-medium ${getProgressTrackColor(percentage)}`}>
                             {percentage.toFixed(0)}%
                           </span>
-                          <span className="text-muted-foreground text-xs">
+                          <span className="text-muted-foreground text-xs tabular-nums">
                             {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
                           </span>
                         </div>
